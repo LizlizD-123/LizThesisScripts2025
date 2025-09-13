@@ -1,1 +1,2 @@
 
+setChannelNames ('DAPI', 'IFNg', 'CD56', 'CD3')
