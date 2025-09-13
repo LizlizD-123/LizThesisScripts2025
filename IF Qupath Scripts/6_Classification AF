@@ -1,0 +1,14 @@
+     /*
+      * 20250121 Elizabeth Dunn
+    *Script classify cell type for IF images stained with CD56 and CD3
+    *Cellpose script taken from default template and edited to match requirements of LN images
+    *Run ‣ Run for project for batch mode    
+  
+    */
+    
+    //1. Run Object Classifier
+    // can choose which ever classifer required here. it needs to be loaded into the Qupath project classifier folder in order to access it!
+runObjectClassifier("20240124_1 AF classifier IFNg");
+println 'Object Classifer script done'
+
+    
