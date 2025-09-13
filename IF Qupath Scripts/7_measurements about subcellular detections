@@ -1,0 +1,71 @@
+//20250121 estimated true spots
+//Elizabeth Dunn
+
+for (annotation in getAnnotationObjects()){
+   
+    TotalCellsInThisAnnotation= annotation.getChildObjects().findAll{it.isCell()}//use it.isCell to be sure to count cells only not just all detections
+    print ("I have " + TotalCellsInThisAnnotation.size() + " cells")
+    TotalCellsInThisAnnotation_sum = TotalCellsInThisAnnotation.size()
+   // }
+    annotation.getMeasurementList().put("Cells detected in annotation",TotalCellsInThisAnnotation_sum)
+    }
+    println'num cells estimated script done'  
+    
+    totaldetections = 0
+    totalspots = 0
+    totalclusters = 0
+    estimatedspotfromcluster = 0
+    
+    //describe(TotalCellsInThisAnnotation)
+    for (cell in TotalCellsInThisAnnotation) {
+        cell.measurements.put ("total estimated spots",  0)
+        }
+        
+               
+                for (cell in TotalCellsInThisAnnotation) {
+                   //subcellulardetections=cell.getChildObjects().findAll(){cell.isDetection()}
+                   true_subcellulardetections=cell.getChildObjects().findAll(){it.getPathClass() == getPathClass("True")}
+                   
+                   //println('true sub cellular detections' + true_subcellulardetections.size())
+                   totalcellspots=0
+                   
+                      describe (true_subcellulardetections)
+                      if(true_subcellulardetections.size()>0) {
+                          print (true_subcellulardetections.size())
+                          
+                          totaldetections = totaldetections + true_subcellulardetections.size()
+                     
+
+                          println("total dections" + totaldetections)
+                          
+                          describe (true_subcellulardetections)                      
+                          
+                         for (detection in true_subcellulardetections) {
+                             
+                           println "measurement" + detection.measurements.get ("Subcellular cluster: Channel 2: Area") 
+                           
+                          if (detection.measurements.get ("Subcellular cluster: Channel 2: Area" )>= 4.5) {
+                          totalclusters = totalclusters  + 1 
+                          trueIFNgestimatedspot_fromcluster=detection.measurements.get("Subcellular cluster: Channel 2: Area")/2.7  
+                          totalcellspots=totalcellspots + trueIFNgestimatedspot_fromcluster
+                          detection.measurements.put("True spots from cluster",  trueIFNgestimatedspot_fromcluster)
+                           } else {
+                              
+                              totalspots = totalspots +1
+                              totalcellspots+=1
+                           }
+                           
+                
+                println (" total sposts" + totalspots)
+
+                println (" total clusters" +totalclusters )
+                          }
+                           cell.measurements.put ("total estimated spots",  totalcellspots)
+                          }
+                         
+                          
+                          }
+                          
+                    ////////////////////////      
+
+
