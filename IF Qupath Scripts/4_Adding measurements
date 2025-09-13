@@ -1,0 +1,8 @@
+//20250120 Adding Shape and Intensity Features to all detections and annotations. This should help with classification
+
+selectDetections();
+runPlugin('qupath.lib.algorithms.IntensityFeaturesPlugin', '{"pixelSizeMicrons":0.325,"region":"ROI","tileSizeMicrons":25.0,"channel1":false,"channel2":true,"channel3":false,"channel4":false,"doMean":true,"doStdDev":true,"doMinMax":true,"doMedian":true,"doHaralick":true,"haralickMin":800.0,"haralickMax":10000.0,"haralickDistance":1,"haralickBins":32}')
+addShapeMeasurements("AREA", "LENGTH", "CIRCULARITY", "SOLIDITY", "MAX_DIAMETER", "MIN_DIAMETER")
+selectAnnotations();
+runPlugin('qupath.lib.algorithms.IntensityFeaturesPlugin', '{"pixelSizeMicrons":0.325,"region":"ROI","tileSizeMicrons":25.0,"channel1":false,"channel2":true,"channel3":false,"channel4":false,"doMean":true,"doStdDev":true,"doMinMax":true,"doMedian":true,"doHaralick":true,"haralickMin":800.0,"haralickMax":10000.0,"haralickDistance":1,"haralickBins":32}')
+addShapeMeasurements("AREA", "LENGTH", "CIRCULARITY", "SOLIDITY", "MAX_DIAMETER", "MIN_DIAMETER")
