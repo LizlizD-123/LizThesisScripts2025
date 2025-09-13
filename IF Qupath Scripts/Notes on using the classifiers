@@ -1,0 +1,5 @@
+To use the classifiers I have already made in a new project. In the main project directory (where the .qproj file is
+ located). Have a folder called 'classifiers'. In the folder put the below 'classes' .json file. Also make a folder called 'object
+ classifiers' and put the classifiers .json files in there.
+ The channel names and detection measurements used in the .json file classifiers must be used, so make sure the
+ current project names and measurements applied match.
