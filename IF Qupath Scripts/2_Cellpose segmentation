@@ -1,5 +1,5 @@
     /*20240823 Elizabeth Dunn
-    *Script to segment IF stained images and count IFNg specks, classify cell type and then export measurements
+    *Pipeline to segment IF stained images and count IFNg specks, classify cell type and then export measurements
     *Cellpose script taken from default template and edited to match requirements of LN images
     *Run ‣ Run for project for batch mode   
     *make sure to save in between running scripts! 
