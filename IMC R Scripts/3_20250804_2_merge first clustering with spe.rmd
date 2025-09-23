@@ -1,0 +1,264 @@
+---
+title: "20250804_2_merging cluster csv with spe"
+author: "Elizabeth Dunn"
+date: "2025-08-04"
+output: html_document
+
+#most of this written by Tom
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(IMComplete)
+library(tidyverse)
+library(SpatialExperiment)
+library(devtools)
+library(dplyr)
+library(tidyverse)
+library(viridis)
+```
+
+```{r}
+#load in spe used originally
+
+setwd("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis")
+
+spe<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250430_norm_spe.rds")
+
+spe$ImageID <- as.numeric(spe$ImageID)
+
+spe$uID <- paste0(spe$ImageID, "_", round(as.data.frame(spatialCoords(spe))$X,0), "_", round(as.data.frame(spatialCoords(spe))$Y,0))
+
+
+```
+
+```{r}
+# name the csvs you want to import
+
+csvs <- c(all_cells= "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/5_R_analysis/FlowJo2/Export/20250408 all cells.csv")
+
+```
+
+```{r}
+# start with 1, read in csv, give it the subset name
+
+i=1
+
+data <- read.csv(csvs[i]) %>% mutate(subset = names(csvs)[i])
+
+data$uID <- paste0(data$ImageID, "_" ,round(data$X,0), "_", round(data$Y,0))
+
+length(data$uID)
+
+# repeat for remaining csvs
+
+#for(i in 2:length(csvs)){
+  
+#  temp <- read.csv(csvs[i]) %>% mutate(subset = names(csvs)[i])
+  
+#  temp$uID <- paste0(temp$ImageID, "_" ,round(temp$X,0), "_", round(temp$Y,0))
+  
+ # data <- rbind(data, temp)
+#  
+#}
+
+
+
+#subset the data frame to just contain uID, cluster and subset
+
+# remove duplicates (cells that end up in multiple gates)
+
+data <- data[!duplicated(data$uID),]
+
+
+
+
+
+# these two can take some time - adding unique IDs based on expressions
+
+data$uID <- apply(data[, 6:43], 1, paste, collapse = "_")
+
+spe$uID <- apply(t(assay(spe, "data")), 1, paste, collapse = "_")
+
+spee <- spe[, spe$uID %in% data$uID]
+
+
+
+```
+
+```{r}
+#checking that all uIDs can be found
+
+table(data$uID %in% spee$uID)
+
+table(spee$uID %in% data$uID)
+
+length(data$uID)
+length(spee$uID)
+
+
+
+#subset the data frame to just contain uID, cluster and subset
+
+data_subset <- data %>% select(uID, population_name, Clusters)
+
+new_df <- as.data.frame(spee$uID)
+
+colnames(new_df) <- 'uID'
+
+new_df <- new_df%>%
+  
+  left_join(data_subset, by = "uID", multiple = "first")
+
+length(data_subset$uID)
+length(new_df$uID)
+
+
+new_df$Clusters[is.na(new_df$Clusters)] <- "NA"
+
+new_df$population_name[is.na(new_df$population_name)] <- "NA"
+
+
+
+spee$Clusters <- new_df$Clusters
+
+spee$population_name <- new_df$population_name
+
+
+
+```
+
+
+```{r}
+## export to mantis
+spee$CellID <- spee$cellID
+setwd("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/5_R_analysis/MantisProject2")
+IMComplete::ExportToMantis(spee,"population_name", "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/5_R_analysis/MantisProject2/populations_20250508.csv")
+#save new spe
+saveRDS(spee, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250430_norm_spe_clusters.rds")
+
+
+
+```
+
+```{r}
+#optional make UMAP and check
+
+spe = PerformUMAP(
+  
+  spe,
+  
+  markers = IMComplete::UseMarkers("Cluster"),
+  
+  assay_name = "data",
+  
+  batch_corrected = F
+  
+)
+
+
+
+PlotDim(spe, "UMAP", var=c("Clusters"), assay_name="data")
+
+
+
+spe_T <- spe[,spe$subset == "T cells"]
+
+
+
+spe_T = PerformUMAP(
+  
+  spe_T,
+  
+  markers = rownames(spe),
+  
+  assay_name = "data",
+  
+  batch_corrected = F
+  
+)
+
+
+
+PlotDim(spe_T, "UMAP", var=c("Clusters"), assay_name="data")
+```
+
+
+```{r}
+#clean up the names and make heatmaps for thesis figures
+
+spe<- readRDS ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250430_norm_spe_clusters.rds")
+
+
+```
+
+```{r}
+rownames(spe)<- c("Vimentin", "115In", "CD20",            
+"Collagen III","143Nd", "IFN gamma"
+,"CD83","CD8","Podoplanin","CD16","149Sm", "CD21"                   
+, "Langerin", "CD68","CD45" , "CD31", "CXCR3", "CD56","CCR7", "CD14", "FXIIIA"                
+, "CCR6", "CD11b", "CD45RO", "NaKATPase", "Perilipin1", "CD11c",                
+"Ki67","Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
+"HLA_DR","CD303", "CXCR5", "DNA1", "DNA2")
+
+unique(rownames(spe))
+
+rowSubset (spe)<- c("Vimentin",  "CD20",            
+"Collagen III", "IFN gamma"
+,"CD83","CD8","Podoplanin","CD16", "CD21"                   
+, "Langerin", "CD68","CD45" , "CD31", "CXCR3", "CD56","CCR7", "CD14", "FXIIIA"                
+, "CCR6", "CD11b", "CD45RO", "Perilipin1", "CD11c",                
+"Ki67","Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
+"HLA_DR","CD303", "CXCR5")     
+
+```
+
+
+```{r}
+spe$population_name_1<- factor(spe$population_name, levels = c(
+"BEC",
+"LEC",
+"undefined CD45-",
+"extrafollicular B cells?",
+"follicular B cells",
+"T cell",
+"cDC1",
+"NK/cDC2",
+"cDC2",
+"pDC",
+"langerin",
+"mono/mac",
+"CD169+ macs",
+"medullary mac"
+))
+    
+```
+
+```{r}
+
+mean_aggregation_mean <- scuttle::aggregateAcrossCells(x = as(spe,                                                        "SingleCellExperiment"), ids = SummarizedExperiment::colData(spe)$population_name_1,  statistics = "mean", use.assay.type = "data",   subset.row = rowSubset(spe))
+
+mean_aggregation_sum <- scuttle::aggregateAcrossCells(x = as(spe,                                                        "SingleCellExperiment"), ids = SummarizedExperiment::colData(spe)$population_name_1,  statistics = "sum", use.assay.type = "data",   subset.row = rowSubset(spe))
+
+
+
+```
+
+
+```{r}
+
+
+png("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/heatmap figures/pheatmap_mean_20250710_2_rb.png", res = 600, width =20, height = 18, unit = "cm")
+pheatmap::pheatmap(assay(mean_aggregation_mean, "data"), scale="row", cluster_rows = T, cluster_cols = F, color = colorRampPalette(c("navy", "white", "firebrick3"))(50), fontsize = 12, fontsize_row = 12, gaps_col = c(3, 5, 6, 11) )
+dev.off()
+
+
+png("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/heatmap figures/pheatmap_sum_20250710_2_rb.png", res = 600, width =20, height = 18, unit = "cm")
+pheatmap::pheatmap(assay(mean_aggregation_sum, "data"), scale="row", cluster_rows = T, cluster_cols = F, color = colorRampPalette(c("navy", "white", "firebrick3"))(50), fontsize = 12, fontsize_row = 12, gaps_col = c(3, 5, 6, 11),)
+dev.off()
+```
+
