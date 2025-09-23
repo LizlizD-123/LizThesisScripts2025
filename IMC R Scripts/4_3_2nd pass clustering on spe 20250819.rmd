@@ -158,34 +158,10 @@ spe$CellID <- spe$cellID
 IMComplete::ExportToMantis(spe,"population_name_NKs_adipo", "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/5_R_analysis/MantisProject2/populations_NK_adipo_20250516.csv")
 ```
 
-```{r}
-#optional
-#make a UMAP and see how it looks
-#needs the panel.csv so set the working directory
-#need to call the population and "Cluster" to get the UMAP to work
-setwd("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow")
 
-spe = PerformUMAP(
-  
-  spe,
-  
-  markers = IMComplete::UseMarkers("Cluster"),
-  
-  assay_name = "data",
-  
-  batch_corrected = F
-  
-)
-
-
-
-PlotDim(spe, "UMAP", var=c("Cluster"), assay_name="data")
-
-
-```
 
 ```{r}
-#happy with how it looks in Mantis and the UMAP
+#happy with how it looks in Mantis 
 #now lets re-cluster on all the DC subsets to make that look cleaner
 #make a column that divides up by APC or not, so we can filter later
 spe$population_name_APCgroup <- ifelse(spe$population_name_NKs=="NK/cDC2"| spe$population_name_NKs_adipo=="langerin"|spe$population_name_NKs_adipo=="mono/mac"|
@@ -346,13 +322,13 @@ ggsave("20250521_CD45heatmap.png")
 ```{r}
 speAPC_clustered <- speAPC_clustered |>
   mutate(Cluster_APC_final = case_when(
-    APC_Cluster == "cluster_1" ~ "pDC", # Granulocytes
-    APC_Cluster == "cluster_2" ~ "Langerin+ cDC2", # Myeloid cells
-    APC_Cluster == "cluster_3" ~ "cDC2", # Squamous cells
-    APC_Cluster == "cluster_4" ~ "CD169- macs", # Epithelial cells
-    APC_Cluster == "cluster_5" ~ "cDC1", # Squamous cells (tumour cells)
-    APC_Cluster == "cluster_6" ~ "CD169+ macs", # CD4 T cells
-    APC_Cluster == "cluster_7" ~ "Mono/mac", # B cells
+    APC_Cluster == "cluster_1" ~ "pDC",
+    APC_Cluster == "cluster_2" ~ "Langerin+ cDC2", 
+    APC_Cluster == "cluster_3" ~ "cDC2", 
+    APC_Cluster == "cluster_4" ~ "CD169- macs", 
+    APC_Cluster == "cluster_5" ~ "cDC1", 
+    APC_Cluster == "cluster_6" ~ "CD169+ macs", 
+    APC_Cluster == "cluster_7" ~ "Mono/mac", 
 
   ))
 
@@ -370,9 +346,9 @@ speT_clustered$Cluster_T_memory <- ifelse(assay(speT_clustered,"data")["x164Dy_C
 
 speT_clustered<- speT_clustered |>
   mutate(Cluster_T_final = case_when(
-    T_Cluster == "cluster_1" & Cluster_T_memory== "memory" ~ "Memory CD4+ T cell", # Granulocytes
+    T_Cluster == "cluster_1" & Cluster_T_memory== "memory" ~ "Memory CD4+ T cell", 
     T_Cluster == "cluster_2" & Cluster_T_memory== "memory" ~ "Memory CD8+ T cell",
-    T_Cluster == "cluster_1" & Cluster_T_memory== "naive" ~ "Naive CD4+ T cell", # Granulocytes
+    T_Cluster == "cluster_1" & Cluster_T_memory== "naive" ~ "Naive CD4+ T cell", 
     T_Cluster == "cluster_2" & Cluster_T_memory== "naive" ~ "Naive CD8+ T cell",
   
 
@@ -409,7 +385,7 @@ speCD45_clustered <- speCD45_clustered |>
   mutate(Cluster_CD45_final = case_when(
     Cluster_CD45_before_final == "cluster_1" ~ "Fibroblast",
     Cluster_CD45_before_final == "cluster_2" ~ "FRC",
-    Cluster_CD45_before_final == "LEC" ~ "LEC", # Myeloid cells
+    Cluster_CD45_before_final == "LEC" ~ "LEC", 
     Cluster_CD45_before_final == "cluster_3" ~ "BEC",
     Cluster_CD45_before_final == "cluster_4" ~ "FDC"
 
