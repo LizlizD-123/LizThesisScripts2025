@@ -1,3 +1,4 @@
+
 ---
 title: "Making better heatmaps IMCR analysis"
 author: "Elizabeth Dunn"
@@ -30,7 +31,7 @@ library(FuseSOM)
 ```
 
 ```{r}
-#spe with final cluster and UMAP calculated from previous step
+#spe with final cluster and UMAP calculated from previous steps
 spe<- readRDS("C:/Users/lizwork/Documents/IMCRanalysis/20250523_final_cluster_fixed_adipo_RO_dim.rds")
 setwd("C://Users/lizwork/Documents/IMCRanalysis")
 ```
@@ -83,7 +84,7 @@ dittoBarPlot(spe, var = "treatment", group.by = "DonorID")
 
 #based on the above, we want to remove LN154 and LN217 from this analysis, as they are mock only. Also remove LN212 and LN223.2, because they do not have R848. 
 #Can add back #in later if we want to do things with just mock samples, like neighbourhood analysis in mock only.
-#20250610 added them back in as I am using a lmer mixed effects model, can put in random intercept?
+#20250610 added them back in as I am using a lmer mixed effects model
 spe<-spe[, colData(spe)$DonorID!="LN154"]
 spe<-spe[, colData(spe)$DonorID!="LN217"]
 # spe<-spe[, colData(spe)$DonorID!="LN212"]
