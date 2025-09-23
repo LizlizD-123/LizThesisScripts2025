@@ -1,0 +1,951 @@
+---
+title: "20250514 fixing spe merging together"
+output: html_document
+date: "2025-05-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidySpatialExperiment)
+library(IMComplete)
+library(tidyverse)
+library(SpatialExperiment)
+library(devtools)
+library(dplyr)
+library(tidyverse)
+library(pheatmap)
+library(FuseSOM)
+library(dittoSeq)
+library(scater)
+
+
+
+
+library(dittoSeq)
+library(scater)
+library(patchwork)
+library(cowplot)
+library(viridis)
+library(SpatialExperiment)
+library(Rphenograph)
+library(tidySpatialExperiment)
+
+```
+
+
+```{r}
+  
+#read in the spe created from 20250508, the spe with the merged cleaned cells and clusters from FuseSOM
+setwd("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis")
+
+spe<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250430_norm_spe_clusters.rds")
+
+length1<-length(spe$uID)
+#checking names
+#spe$population_name
+#rownames(assay(spe,"data"))
+
+
+
+
+```
+```{r}
+#lets make a heatmap before we start doing any filtering
+
+
+
+set.seed(123)
+Markers1<-c ("x154Sm_CD45","x170Er_CD3","x141Pr_CD20","x153Eu_CD68", "x158Gd_CD56", "x152Sm_Anti_Cy3_Langerin", "x155Gd_CD31", 
+            "x147Sm_Podoplanin", "x175Lu_CD303", "x160Gd_CD14", "x172Yb_Siglec1", "x167Er_CD11c", "x171Yb_CD1c", "x169Tm_Anti_Cy5_Clec9a",
+            "x151Eu_CD21", "x148Nd_CD16", "x174Yb_HLA_DR","x142Nd_Collagen_III","x166Er_Perilipin1", "x164Dy_CD45RO" )
+
+
+
+
+NKheatmap<-FuseSOM::markerHeatmap(data=t(assay(spe,"counts")) %>% as.data.frame(), markers = Markers1, 
+                       clusters = spe$population_name, clusterMarkers = T)
+
+
+ggsave("20250521_heatmap_population_name.png")
+
+
+#based on this, we need to do some filtering
+
+
+```
+
+```{r}
+#make a column of CD45+ vs CD45- based on populations
+#take out the NKs from all CD45+ clusters, to avoid the CD56+ stromal cells, which are not NKs (smooth muscle can express CD56)
+
+spe$population_name_CD45<-spe$population_name
+
+spe$population_name_CD45 <- ifelse(spe$population_name=="follicular B cells"|
+                                     spe$population_name=="extrafollicular B cells?"|            spe$population_name=="NK/cDC2"|
+                                     spe$population_name=="langerin"|
+                                     spe$population_name=="mono/mac"|
+                                     spe$population_name=="cDC2"|
+                                     spe$population_name=="CD169+ macs"| spe$population_name=="cDC1"|
+                                     spe$population_name=="T cell"|
+                                     spe$population_name=="medullary mac"| spe$population_name=="pDC",
+                                   
+                                     
+                   "CD45+", "notCD45")
+```
+
+```{r}
+#rownames(assay(spe,"data"))
+
+spe$population_name_NKs <- ifelse(assay(spe,"data")["x158Gd_CD56",]>0.19 & spe$population_name_CD45 == "CD45+", 
+                   
+                   "NK", spe$population_name)
+
+
+#check that worked and the NK pop has been added
+(unique(spe$population_name_NKs))
+length (unique(spe$population_name_NKs))
+
+length2<-length(spe$uID)
+
+#now we can see the NKs have appeared in the list of cluster names
+```
+```{r}
+
+#now pull out adipocytes from all cells based on the classification they were given in Qupath
+spe$population_name_NKs_adipo <- ifelse(spe$Classification == "Adipocyte", 
+                   
+                   "Adipocyte", spe$population_name_NKs)
+
+
+#check that worked and the NK pop has been added
+(unique(spe$population_name_NKs_adipo))
+length (unique(spe$population_name_NKs_adipo))
+length (unique(spe$population_name_NKs_adipo == "NK"))
+length2<-length(spe$uID)
+
+unique(spe$Classification == "Adipocyte")
+
+```
+
+
+
+```{r}
+#now make a heatmap to see how the clusters look minus the NKs
+
+
+set.seed(123)
+Markers<-c ("x154Sm_CD45","x170Er_CD3","x141Pr_CD20","x153Eu_CD68", "x158Gd_CD56", "x152Sm_Anti_Cy3_Langerin", "x155Gd_CD31", 
+            "x147Sm_Podoplanin", "x175Lu_CD303", "x160Gd_CD14", "x172Yb_Siglec1", "x167Er_CD11c", "x171Yb_CD1c", "x169Tm_Anti_Cy5_Clec9a",
+            "x151Eu_CD21", "x148Nd_CD16", "x174Yb_HLA_DR","x142Nd_Collagen_III","x166Er_Perilipin1", "x164Dy_CD45RO" )
+
+
+
+
+NKheatmap<-FuseSOM::markerHeatmap(data=t(assay(spe,"counts")) %>% as.data.frame(), markers = Markers, 
+                       clusters = spe$population_name_NKs_adipo, clusterMarkers = T)
+
+
+ggsave("20250521_NKheatmap.png")
+
+```
+
+```{r}
+#export to mantis
+spe$CellID <- spe$cellID
+IMComplete::ExportToMantis(spe,"population_name_NKs_adipo", "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/5_R_analysis/MantisProject2/populations_NK_adipo_20250516.csv")
+```
+
+```{r}
+#optional
+#make a UMAP and see how it looks
+#needs the panel.csv so set the working directory
+#need to call the population and "Cluster" to get the UMAP to work
+setwd("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow")
+
+spe = PerformUMAP(
+  
+  spe,
+  
+  markers = IMComplete::UseMarkers("Cluster"),
+  
+  assay_name = "data",
+  
+  batch_corrected = F
+  
+)
+
+
+
+PlotDim(spe, "UMAP", var=c("Cluster"), assay_name="data")
+
+
+```
+
+```{r}
+#happy with how it looks in Mantis and the UMAP
+#now lets re-cluster on all the DC subsets to make that look cleaner
+#make a column that divides up by APC or not, so we can filter later
+spe$population_name_APCgroup <- ifelse(spe$population_name_NKs=="NK/cDC2"| spe$population_name_NKs_adipo=="langerin"|spe$population_name_NKs_adipo=="mono/mac"|
+                                     spe$population_name_NKs_adipo=="cDC2"|spe$population_name_NKs_adipo=="CD169+ macs"| spe$population_name_NKs_adipo=="cDC1"|                                    spe$population_name_NKs_adipo=="medullary mac"| spe$population_name_NKs_adipo=="pDC",
+                                   
+                                   
+                                   "APC", "notAPC")
+#check has been added to colnames
+
+unique(spe$population_name_APCgroup)
+```
+
+```{r}
+#lets also make a group of the T cells, so we can cluster on CXCR5, CD4 and CD8
+
+#unique(spe$population_name_NKs_adipo_adipo)
+spe$population_name_Tgroup <- ifelse(spe$population_name_NKs_adipo=="T cell",
+                                   
+                                   "T", "notT")
+
+unique(spe$population_name_Tgroup)
+```
+```{r}
+#lets make a group of B cells
+spe$population_name_Bgroup <- ifelse(spe$population_name_NKs_adipo=="follicular B cells"|
+                                       spe$population_name_NKs_adipo== "extrafollicular B cells?",
+                                       
+                                   
+                                   "B", "notB")
+
+unique(spe$population_name_Bgroup)
+
+#now lets threshold on CD45RO and call them memory or not. Make an spe for the Bs and put back together later
+
+speB<-spe[,spe$population_name_Bgroup=="B"]
+
+
+
+
+#use this column for mutate later, if they are in a B cell zone, call them follicular. This will determine the final name they are given
+
+speB$B_cell_parent_cluster<-ifelse(speB$Parent == "B cell zone" |
+                                  speB$Parent == "Annotation (B cell zone)",
+                                  "follicular", "extrafollicular")
+
+unique (speB$B_cell_parent_cluster)
+```
+
+
+
+```{r}
+#lets also make a group of the CD45- cells, , 
+
+spe$population_name_CD45neg <- ifelse(spe$population_name_NKs_adipo=="undefined CD45-"| spe$population_name_NKs_adipo=="BEC"| spe$population_name_NKs_adipo=="LEC",
+                                   
+                                   
+                                   "CD45-", "notCD45-")
+unique(spe$population_name_CD45neg)
+```
+```{r}
+
+```
+
+```{r}
+#the below will cluster with the spe
+#I want to cluster on just APCs
+
+MarkersAPC<-Markers<-c ("x153Eu_CD68", "x152Sm_Anti_Cy3_Langerin", 
+                        "x175Lu_CD303", "x160Gd_CD14", "x172Yb_Siglec1", "x167Er_CD11c", "x171Yb_CD1c", "x169Tm_Anti_Cy5_Clec9a",
+                         "x148Nd_CD16", "x174Yb_HLA_DR", "x163Dy_CD11b" )
+speAPC<-spe[,spe$population_name_APCgroup=="APC"]
+set.seed(123)
+speAPC_clustered<-runFuseSOM(speAPC, markers = MarkersAPC,
+           assay = 'data', clusterCol="APC_Cluster", numClusters = 7)
+table(speAPC_clustered$APC_Cluster)/sum(table(speAPC_clustered$APC_Cluster))
+#prep data for heatmap
+APCdata<- t(assay(speAPC_clustered,"counts")) %>% as.data.frame()
+
+APCheatmap<-FuseSOM::markerHeatmap(data=APCdata,markers = MarkersAPC, 
+                                  clusters = speAPC_clustered$APC_Cluster, clusterMarkers = T)
+
+
+ggsave("20250521_APCheatmap.png")
+
+
+```
+
+
+
+
+
+```{r}
+#the below will cluster with the spe
+#I want to cluster on just Ts
+rownames(assay(spe,"data"))
+
+MarkersT<-Markers<-c ("x146Nd_CD8","x173Yb_CD4"
+                         )
+speT<-spe[,spe$population_name_Tgroup=="T"]
+
+set.seed(123)
+speT_clustered<-runFuseSOM(speT, markers = MarkersT,
+           assay = 'data', clusterCol="T_Cluster", numClusters = 2)
+table(speT_clustered$T_Cluster)/sum(table(speT_clustered$T_Cluster))
+#prep data for heatmap
+Tdata<- t(assay(speT_clustered,"counts")) %>% as.data.frame()
+
+Theatmap<-FuseSOM::markerHeatmap(data=Tdata,markers = MarkersT, 
+                                  clusters = speT_clustered$T_Cluster, clusterMarkers = T)
+
+
+ggsave("20250521_Theatmap.png")
+
+```
+
+
+
+
+
+
+```{r}
+
+rownames(assay(spe,"data"))
+
+MarkerCD45<-Markers<-c ("x155Gd_CD31", 
+            "x147Sm_Podoplanin", 
+            "x142Nd_Collagen_III","x151Eu_CD21"
+    )
+speCD45<-spe[,spe$population_name_CD45neg=="CD45-"]
+set.seed(123)
+speCD45_clustered<-runFuseSOM(speCD45, markers = MarkerCD45,
+           assay = 'data', clusterCol="CD45_Cluster", numClusters = 4)
+table(speCD45_clustered$CD45_Cluster)/sum(table(speCD45_clustered$CD45_Cluster))
+#prep data for heatmap
+CD45data<- t(assay(speCD45_clustered,"counts")) %>% as.data.frame()
+
+CD45heatmap<-FuseSOM::markerHeatmap(data=CD45data,markers = MarkerCD45, 
+                                  clusters = speCD45_clustered$CD45_Cluster, clusterMarkers = T, threshold=1)
+
+help("markerHeatmap")
+
+
+ggsave("20250521_CD45heatmap.png")
+```
+
+```{r}
+
+#table(speCD45_clustered$uID %in% speT_clustered$uID)
+
+
+```
+
+
+
+```{r}
+
+```
+```{r}
+speAPC_clustered <- speAPC_clustered |>
+  mutate(Cluster_APC_final = case_when(
+    APC_Cluster == "cluster_1" ~ "pDC", # Granulocytes
+    APC_Cluster == "cluster_2" ~ "Langerin+ cDC2", # Myeloid cells
+    APC_Cluster == "cluster_3" ~ "cDC2", # Squamous cells
+    APC_Cluster == "cluster_4" ~ "CD169- macs", # Epithelial cells
+    APC_Cluster == "cluster_5" ~ "cDC1", # Squamous cells (tumour cells)
+    APC_Cluster == "cluster_6" ~ "CD169+ macs", # CD4 T cells
+    APC_Cluster == "cluster_7" ~ "Mono/mac", # B cells
+
+  ))
+
+
+#colData(speAPC_clustered)
+```
+
+
+```{r}
+
+
+speT_clustered$Cluster_T_memory <- ifelse(assay(speT_clustered,"data")["x164Dy_CD45RO",]>0.1, 
+                   
+                   "memory", "naive")
+
+speT_clustered<- speT_clustered |>
+  mutate(Cluster_T_final = case_when(
+    T_Cluster == "cluster_1" & Cluster_T_memory== "memory" ~ "Memory CD4+ T cell", # Granulocytes
+    T_Cluster == "cluster_2" & Cluster_T_memory== "memory" ~ "Memory CD8+ T cell",
+    T_Cluster == "cluster_1" & Cluster_T_memory== "naive" ~ "Naive CD4+ T cell", # Granulocytes
+    T_Cluster == "cluster_2" & Cluster_T_memory== "naive" ~ "Naive CD8+ T cell",
+  
+
+  ))
+unique(speT_clustered$Cluster_T_memory)
+sum(is.na(speT_clustered$Cluster_T_final))
+
+MarkersT<-Markers<-c ("x146Nd_CD8","x173Yb_CD4", "x164Dy_CD45RO"
+                         )
+
+Tdata<- t(assay(speT_clustered,"counts")) %>% as.data.frame()
+
+Theatmap<-FuseSOM::markerHeatmap(data=Tdata,markers = MarkersT, 
+                                  clusters = speT_clustered$Cluster_T_final, clusterMarkers = T)
+
+
+ggsave("20250521_Theatmap_fixed.png")
+
+
+#colData(speAPC_clustered)
+```
+
+```{r}
+#sub use a threshold to seperate the LECs from the FRCs in the high podoplanin cluster
+speCD45_clustered$Cluster_CD45_before_final <- ifelse(assay(speCD45_clustered,"data")["x155Gd_CD31",]>0.05 & speCD45_clustered$CD45_Cluster == "cluster_2", 
+                   
+                   "LEC", speCD45_clustered$CD45_Cluster)
+
+unique(speCD45_clustered$Cluster_CD45_before_final)
+
+
+#then apply the final cluster names
+speCD45_clustered <- speCD45_clustered |>
+  mutate(Cluster_CD45_final = case_when(
+    Cluster_CD45_before_final == "cluster_1" ~ "Fibroblast",
+    Cluster_CD45_before_final == "cluster_2" ~ "FRC",
+    Cluster_CD45_before_final == "LEC" ~ "LEC", # Myeloid cells
+    Cluster_CD45_before_final == "cluster_3" ~ "BEC",
+    Cluster_CD45_before_final == "cluster_4" ~ "FDC"
+
+  ))
+
+unique(speCD45_clustered$Cluster_CD45_final)
+
+
+CD45heatmap2<-FuseSOM::markerHeatmap(data=CD45data,markers = MarkerCD45, 
+                                  clusters = speCD45_clustered$Cluster_CD45_final, clusterMarkers = T, threshold=1)
+
+help("markerHeatmap")
+
+
+ggsave("20250521_CD45heatmap_fixed.png")
+
+
+```
+
+```{r}
+#cluster on fibroblasts and LEC to get out FRCs from both
+
+
+
+```
+
+
+```{r}
+
+
+
+
+spe <-spe %>% left_join(speAPC_clustered)
+length(spe$uID)
+
+#colData(spe)
+
+
+
+#unique(spe$Cluster_T_final)
+
+#unique(spe$Cluster_CD45_final)
+
+#colData(spe)
+length3<-length(spe$uID)
+#table(speAPC_clustered$uID %in% spe$uID)
+
+spe <-spe %>% left_join(speT_clustered)
+length4<-length(spe$uID)
+#unique(spe$Cluster_CD45_final)
+#colData(spe)
+spe <-spe %>% left_join(speCD45_clustered)
+table(speCD45_clustered$uID %in% spe$uID)
+length5<-length(spe$uID)
+
+colData(spe)
+
+#saveRDS(spe, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250515_test adding clusters to big spe.rds")
+
+#colData(spe)
+#unique(spe$population_name_NKs_adipo)#for NKs and B cells
+#unique(spe$Cluster_2)#for APCs
+#unique(spe$Cluster_3)# for T cells
+#unique(spe$Cluster_4)# for CD45-
+
+
+spe <-spe %>% left_join(speB)
+
+
+unique(spe$Cluster_CD45_final)
+unique(spe$Cluster_4)
+sum(is.na(spe$final_cluster))
+sum(is.na(spe$Cluster_4))
+colData(spe)
+```
+
+```{r}
+#now make new column combining the correct columns
+
+#unique(spe$population_name_NKs_adipo)
+spee <- spe |>
+  mutate(final_cluster = case_when(
+    
+    
+    population_name_NKs_adipo == "NK" ~ "NK/Innate Lymphocytes", # CD4 T cells
+    B_cell_parent_cluster == "follicular" ~ "Follicular B cell",
+    B_cell_parent_cluster ==  "extrafollicular" ~ "Extrafollicular B cell",
+    Cluster_APC_final == "pDC" ~ "pDC",# Granulocytes
+    Cluster_APC_final == "Langerin+ cDC2" ~ "Langerin+ cDC2", # Myeloid cells
+    Cluster_APC_final == "cDC2" ~ "cDC2", # Squamous cells
+    Cluster_APC_final == "CD169- macs" ~ "CD169- macs", # Epithelial cells
+    Cluster_APC_final == "cDC1" ~ "cDC1", # Squamous cells (tumour cells)
+    Cluster_APC_final == "CD169+ macs" ~ "CD169+ macs", # CD4 T cells
+    Cluster_APC_final == "Mono/mac" ~ "Mono/mac",
+    Cluster_T_final == "Memory CD8+ T cell" ~ "Memory CD8+ T cell",
+    Cluster_T_final == "Naive CD8+ T cell" ~ "Naive CD8+ T cell",
+    Cluster_T_final == "Memory CD4+ T cell" ~ "Memory CD4+ T cell",
+    Cluster_T_final == "Naive CD4+ T cell" ~ "Naive CD4+ T cell",
+    Cluster_CD45_final == "Fibroblast" ~ "Fibroblast",
+    Cluster_CD45_final == "FRC" ~ "FRC",
+    population_name_NKs_adipo == "Adipocyte" ~ "Adipocyte",
+    Cluster_CD45_final == "LEC" ~ "LEC",
+    Cluster_CD45_final == "BEC" ~ "BEC",
+    Cluster_CD45_final == "FDC" ~ "FDC"
+
+  ))
+unique(spee$final_cluster)
+sum(is.na(spee$final_cluster))
+
+
+
+#table(speCD45_clustered$Cluster_T_final %in% spe$uID)
+
+
+
+```
+
+```{r}
+#export back to mantis and save RDS
+
+saveRDS(spee, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250521_final_cluster_fixed_adipo_RO.rds")
+
+spe$CellID <- spe$cellID
+IMComplete::ExportToMantis(spee,"final_cluster", "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/5_R_analysis/MantisProject2/final_cluster_fixed_adipo_RO_20250521.csv")
+```
+
+
+```{r}
+#now make some plots to see how it all looks put back together
+set.seed(123)
+Markers<-c ("x154Sm_CD45","x170Er_CD3","x141Pr_CD20","x153Eu_CD68", "x158Gd_CD56", "x152Sm_Anti_Cy3_Langerin", "x155Gd_CD31", 
+            "x147Sm_Podoplanin", "x175Lu_CD303", "x160Gd_CD14", "x172Yb_Siglec1", "x167Er_CD11c", "x171Yb_CD1c", "x169Tm_Anti_Cy5_Clec9a",
+            "x151Eu_CD21", "x148Nd_CD16", "x174Yb_HLA_DR","x142Nd_Collagen_III","x166Er_Perilipin1" , "x146Nd_CD8", "x173Yb_CD4" , "x164Dy_CD45RO")
+
+
+
+finalheatmap<-FuseSOM::markerHeatmap(data=t(assay(spee,"counts")) %>% as.data.frame(), markers = Markers, 
+                       clusters = spee$final_cluster, clusterMarkers = T)
+
+
+ggsave("20250521_2_final_heatmap.png")
+
+
+
+#load in the spe again to make a nicer figure and fix the names
+
+spe<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250521_final_cluster_fixed_adipo_RO.rds")
+
+
+rownames(spe)<- c("Vimentin", "115In", "CD20",            
+"Collagen III","143Nd", "IFN gamma"
+,"CD83","CD8","Podoplanin","CD16","149Sm", "CD21"                   
+, "Langerin", "CD68","CD45" , "CD31", "CXCR3", "CD56","CCR7", "CD14", "FXIIIA"                
+, "CCR6", "CD11b", "CD45RO", "NaKATPase", "Perilipin1", "CD11c",                
+"Ki67","Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
+"HLA_DR","CD303", "CXCR5", "DNA1", "DNA2")
+
+unique(rownames(spe))
+
+rowSubset (spe)<- c("Vimentin",  "CD20",            
+"Collagen III", "IFN gamma"
+,"CD83","CD8","Podoplanin","CD16", "CD21"                   
+, "Langerin", "CD68","CD45" , "CD31", "CXCR3", "CD56","CCR7", "CD14", "FXIIIA"                
+, "CCR6", "CD11b", "CD45RO", "Perilipin1", "CD11c",                
+"Ki67","Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
+"HLA_DR","CD303", "CXCR5")  
+
+rowSubset(spe)
+
+Markers<- c("Vimentin",  "CD20",            
+"Collagen III", "IFN gamma"
+,"CD83","CD8","Podoplanin","CD16", "CD21"                   
+, "Langerin", "CD68","CD45" , "CD31", "CXCR3", "CD56","CCR7", "CD14", "FXIIIA"                
+, "CCR6", "CD11b", "CD45RO", "Perilipin1", "CD11c",                
+"Ki67","Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
+"HLA_DR","CD303", "CXCR5")  
+
+
+
+
+
+
+ggsave("20250610_2_final_heatmap.png", dpi= "print", height = 9.5, width = 10.5)
+
+
+cur_cells <- sample(seq_len(ncol(spe)), 2000)
+
+png(file="D://ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/dittoheatmap_20250702.png",  height = 30, width = 30, res=300, units = 'cm')
+anot_heatmap<-dittoHeatmap(spe[,cur_cells], 
+             genes = rowSubset(spe),
+             assay = "data", 
+             cluster_cols = F, 
+             scale = "none",
+             heatmap.colors = viridis(100), 
+             annot.by = c("final_cluster"),
+             order.by = c("final_cluster")
+             
+             )
+anot_heatmap
+dev.off()
+
+
+#make a heatmap for each treatment subset
+speAS01<-spe[,spe$treatment=="AS01"]
+
+
+spemock<-spe[,spe$treatment=="mock"]
+speR848<-spe[,spe$treatment=="R848"]
+speT0h<-spe[,spe$treatment=="T0h"]
+
+
+df<-spe$cellID
+head(colData(spe))
+(spe)
+
+
+finalheatmap<-FuseSOM::markerHeatmap(data=t(assay(spe,"counts")) %>% as.data.frame(), markers = Markers, 
+                       clusters = spe$final_cluster, clusterMarkers = F)
+
+
+ggsave("20250610_2_final_heatmap_AS01.png", dpi= "print", height = 9.5, width = 10.5)
+
+finalheatmap<-FuseSOM::markerHeatmap(data=t(assay(spemock,"counts")) %>% as.data.frame(), markers = Markers, 
+                       clusters = spemock$final_cluster, clusterMarkers = F)
+
+
+ggsave("20250610_2_final_heatmap_mock.png", dpi= "print", height = 9.5, width = 10.5)
+
+finalheatmap<-FuseSOM::markerHeatmap(data=t(assay(speR848,"counts")) %>% as.data.frame(), markers = Markers, 
+                       clusters = speR848$final_cluster, clusterMarkers = F)
+
+
+ggsave("20250610_2_final_heatmapR848.png", dpi= "print", height = 9.5, width = 10.5)
+
+finalheatmap<-FuseSOM::markerHeatmap(data=t(assay(speT0h,"counts")) %>% as.data.frame(), markers = Markers, 
+                       clusters = speT0h$final_cluster, clusterMarkers = F)
+
+
+ggsave("20250610_2_final_heatmap_T0h.png", dpi= "print", height = 9.5, width = 10.5)
+
+
+Markers<- c( "IFN gamma"
+,"CD83", "CXCR3", "CD56","CCR7"               
+, "CCR6",                
+"Ki67",                 
+"HLA_DR","CXCR5") 
+
+speAS01<-spe[,spe$treatment=="AS01"]
+speAS01<-speAS01[,speAS01$final_cluster!="LEC"]
+speAS01<-speAS01[,speAS01$final_cluster!="BEC"]
+speAS01<-speAS01[,speAS01$final_cluster!="FRC"]
+speAS01<-speAS01[,speAS01$final_cluster!="FDC"]
+speAS01<-speAS01[,speAS01$final_cluster!="Fibroblast"]
+speAS01<-speAS01[,speAS01$final_cluster!="Adipocyte"]
+  
+  FuseSOM::markerHeatmap(data=t(assay(speAS01,"counts")) %>% as.data.frame(), markers = Markers, 
+                       clusters = speAS01$final_cluster, clusterMarkers = F, fontSize = 24)
+
+ggsave("20250702_5_final_heatmap_AS01.png", dpi= "retina", height = 9.5, width = 10.5)
+
+
+
+spemock<-spe[,spe$treatment=="mock"]
+spemock<-spemock[,spemock$final_cluster!="LEC"]
+spemock<-spemock[,spemock$final_cluster!="BEC"]
+spemock<-spemock[,spemock$final_cluster!="FRC"]
+spemock<-spemock[,spemock$final_cluster!="FDC"]
+spemock<-spemock[,spemock$final_cluster!="Fibroblast"]
+spemock<-spemock[,spemock$final_cluster!="Adipocyte"]
+
+  FuseSOM::markerHeatmap(data=t(assay(spemock,"counts")) %>% as.data.frame(), markers = Markers, 
+                       clusters = spemock$final_cluster, clusterMarkers = F)
+  
+  ggsave("20250612_2_final_heatmap_mock.png", dpi= "print", height = 9.5, width = 10.5)
+  
+  
+  speR848<-spe[,spe$treatment=="R848"]
+speR848<-speR848[,speR848$final_cluster!="LEC"]
+speR848<-speR848[,speR848$final_cluster!="BEC"]
+speR848<-speR848[,speR848$final_cluster!="FRC"]
+speR848<-speR848[,speR848$final_cluster!="FDC"]
+speR848<-speR848[,speR848$final_cluster!="Fibroblast"]
+speR848<-speR848[,speR848$final_cluster!="Adipocyte"]
+
+  FuseSOM::markerHeatmap(data=t(assay(speR848,"counts")) %>% as.data.frame(), markers = Markers, 
+                       clusters = speR848$final_cluster, clusterMarkers = F)
+  
+  ggsave("20250612_2_final_heatmap_R848.png", dpi= "print", height = 9.5, width = 10.5)
+  
+  
+    speT0h<-spe[,spe$treatment=="T0h"]
+speT0h<-speT0h[,speT0h$final_cluster!="LEC"]
+speT0h<-speT0h[,speT0h$final_cluster!="BEC"]
+speT0h<-speT0h[,speT0h$final_cluster!="FRC"]
+speT0h<-speT0h[,speT0h$final_cluster!="FDC"]
+speT0h<-speT0h[,speT0h$final_cluster!="Fibroblast"]
+speT0h<-speT0h[,speT0h$final_cluster!="Adipocyte"]
+
+  FuseSOM::markerHeatmap(data=t(assay(speT0h,"counts")) %>% as.data.frame(), markers = Markers, 
+                       clusters = speT0h$final_cluster, clusterMarkers = F)
+  
+  ggsave("20250612_2_final_heatmap_T0h.png", dpi= "print", height = 9.5, width = 10.5)
+  
+
+
+```
+
+
+```{r}
+#making a csv so that I can import the classifications back into Qupath to make images, and saving a copy of the spe
+
+spe<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250521_final_cluster_fixed_adipo_RO.rds")
+
+
+
+
+unique(spe$Image)
+spe$"Object ID"<-spe$Object.ID
+spe$`Object ID`
+spe$Class<-spe$final_cluster
+
+#spe1<-spe[,spe$Image=="penguinoutput_2025010920241108 p10 b1 LN179 T0h 17 IFNgc_s0_a1_ac_full.tiff"]
+
+data= as.data.frame(colData(spe))
+
+write.csv(data, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250521_final_cluster_fixed_adipo_RO_QP.csv", row.names=F)
+
+
+
+finalheatmap<-FuseSOM::markerHeatmap(data=t(assay(spe,"counts")) %>% as.data.frame(), markers = Markers, 
+                       clusters = spe$final_cluster, clusterMarkers = T)
+
+```
+
+```{r}
+##make another csv for qupath, with the cluster names edited for IFNg
+
+spe<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250521_final_cluster_fixed_adipo_RO.rds")
+
+
+rownames(spe)<- c("Vimentin", "115In", "CD20",            
+"Collagen III","143Nd", "IFN gamma"
+,"CD83","CD8","Podoplanin","CD16","149Sm", "CD21"                   
+, "Langerin", "CD68","CD45" , "CD31", "CXCR3", "CD56","CCR7", "CD14", "FXIIIA"                
+, "CCR6", "CD11b", "CD45RO", "NaKATPase", "Perilipin1", "CD11c",                
+"Ki67","Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
+"HLA_DR","CD303", "CXCR5", "DNA1", "DNA2")
+
+
+CD83pos<-assay(spe,"data")["CD83",]>0.12 
+
+IFNgpos<-assay(spe,"data")["IFN gamma",]>0.1
+Ki67pos<-assay(spe,"data")["Ki67",]>0.1
+CXCR3pos<-assay(spe,"data")["CXCR3",]>0.09
+
+spe <- spe |>
+  mutate(final_cluster_1= case_when(
+    
+    
+    final_cluster == "NK/Innate Lymphocytes" & IFNgpos ~ "IFNgamma + NK/InnateLymphocytes",
+    final_cluster == "NK/Innate Lymphocytes" & !IFNgpos ~ "IFNgamma - NK/InnateLymphocytes",
+    final_cluster == "Follicular B cell"~ "Follicular B cell",
+    final_cluster == "Extrafollicular B cell"~ "Extrafollicular B cell",
+    final_cluster == "pDC"~ "pDC",
+    final_cluster == "Langerin+ cDC2"~ "Langerin+ cDC2",
+    final_cluster == "cDC2"~ "cDC2",
+    final_cluster == "CD169- macs"~ "CD169- macs",
+    final_cluster == "cDC1" ~ "cDC1",
+    final_cluster == "CD169+ macs" ~ "CD169+ macs",
+    final_cluster == "Mono/mac" ~ "Mono/mac",
+    final_cluster == "Memory CD8+ T cell" & IFNgpos ~ "IFNgamma+ Memory CD8 Tcell",
+    final_cluster == "Memory CD8+ T cell" & !IFNgpos ~ "IFNgamma- Memory CD8 Tcell",
+    final_cluster == "Naive CD8+ T cell" & IFNgpos ~"IFNgamma+ Naive CD8 T cell",
+    final_cluster == "Naive CD8+ T cell" & !IFNgpos ~"IFNgamma- Naive CD8 T cell",
+    final_cluster == "Memory CD4+ T cell"& IFNgpos~ "IFNgamma+ Memory CD4 T cell",
+    final_cluster == "Memory CD4+ T cell"& !IFNgpos~ "IFNgamma- Memory CD4 T cell",
+    final_cluster == "Naive CD4+ T cell" & IFNgpos~ "IFNgamma+ Naive CD4 T cell",
+    final_cluster == "Naive CD4+ T cell" & !IFNgpos~ "IFNgamma- Naive CD4 T cell",
+    final_cluster == "Fibroblast" ~ "Fibroblast",
+    final_cluster == "FRC"~ "FRC",
+    final_cluster == "Adipocyte" ~ "Adipocyte",
+    final_cluster == "LEC" ~ "LEC",
+    final_cluster == "BEC"~ "BEC",
+    final_cluster == "FDC"~ "FDC"
+
+  ))
+
+
+unique(spe$Image)
+spe$"Object ID"<-spe$Object.ID
+spe$`Object ID`
+spe$Class<-spe$final_cluster_1
+
+#spe1<-spe[,spe$Image=="penguinoutput_2025010920241108 p10 b1 LN179 T0h 17 IFNgc_s0_a1_ac_full.tiff"]
+
+#put back into qupath
+
+data= as.data.frame(colData(spe))
+
+write.csv(data, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250705_final_cluster_fixed_adipo_RO_QPIFNg_2.csv", row.names=F)
+
+
+
+
+
+```
+
+
+
+```{r}
+#make a UMAP and see how it looks
+#needs the panel.csv so set the working directory
+#need to call the population and "Cluster" to get the UMAP to work
+#this will add the UMAP numbers to the Dimnames so we can make plots in other packages with this
+library(IMComplete)
+
+spe<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250521_final_cluster_fixed_adipo_RO.rds")
+set.seed(123)
+spe$Cluster<-spe$final_cluster
+setwd("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow")
+
+spe = PerformUMAP(
+  
+  spe,
+  
+  markers = IMComplete::UseMarkers("Cluster"),
+  
+  assay_name = "data",
+  
+  batch_corrected = F
+  
+)
+
+
+
+PlotDim(spe, "UMAP", var=c("Cluster"), assay_name="data")
+
+setwd("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis")
+
+ggsave("20250523_UMAP.png", dpi= "print", height = 7, width = 7 )
+
+
+
+
+
+
+
+
+```
+
+
+```{r}
+#now save with the UMAP and PC results stored in the spatial experiment
+
+saveRDS(spe, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250523_final_cluster_fixed_adipo_RO_dim.rds")
+
+
+#ABOVE SPE USED OFR THE DOWNSTREAM ANALYSIS
+```
+
+
+```{r}
+#testing subclustering on the NKs to pull out CD8+ innate lymphocytes
+# 
+# spe<- readRDS ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250523_final_cluster_fixed_adipo_RO_dim.rds")
+# 
+# 
+# 
+# spe$final_cluster_test <- ifelse(assay(spe,"data")["x146Nd_CD8",]>0.1 & spe$final_cluster == "NK/Innate Lymphocytes", 
+#                    
+#                    "CD8_innate", spe$final_cluster)
+# 
+# 
+# 
+# saveRDS(spe, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250612_final_cluster_fixed_adipo_RO_testCD8.rds")
+# 
+# spe$CellID <- spe$cellID
+# IMComplete::ExportToMantis(spe,"final_cluster_test", "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/5_R_analysis/MantisProject2/final_cluster_fixed_adipo_RO_CD8_20250612.csv")
+```
+
+```{r}
+#now make heat maps for thesis
+
+#showing here how filtering and clustering has cleaned up the expression
+
+
+spe<- readRDS ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250523_final_cluster_fixed_adipo_RO_dim.rds")
+
+```
+
+```{r}
+rownames(spe)<- c("Vimentin", "115In", "CD20",            
+"Collagen III","143Nd", "IFN gamma"
+,"CD83","CD8","Podoplanin","CD16","149Sm", "CD21"                   
+, "Langerin", "CD68","CD45" , "CD31", "CXCR3", "CD56","CCR7", "CD14", "FXIIIA"                
+, "CCR6", "CD11b", "CD45RO", "NaKATPase", "Perilipin1", "CD11c",                
+"Ki67","Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
+"HLA_DR","CD303", "CXCR5", "DNA1", "DNA2")
+
+unique(rownames(spe))
+
+rowSubset (spe)<- c("Vimentin",  "CD20",            
+"Collagen III", "IFN gamma"
+,"CD83","CD8","Podoplanin","CD16", "CD21"                   
+, "Langerin", "CD68","CD45" , "CD31", "CXCR3", "CD56","CCR7", "CD14", "FXIIIA"                
+, "CCR6", "CD11b", "CD45RO", "Perilipin1", "CD11c",                
+"Ki67","Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
+"HLA_DR","CD303", "CXCR5")     
+
+
+
+```
+#pheatmap heatmaps for thesis
+
+```{r}
+spe$population_name_1<- factor(spe$final_cluster, levels= c("Adipocyte", "BEC", "FRC", "FDC", "LEC", "Fibroblast", "Extrafollicular B cell", "Follicular B cell", "Naive CD4+ T cell", "Naive CD8+ T cell", "Memory CD4+ T cell", "Memory CD8+ T cell", "NK/Innate Lymphocytes", "cDC1", "cDC2","Langerin+ cDC2", "pDC", "CD169+ macs", "CD169- macs", "Mono/mac"))
+
+```
+
+
+```{r}
+mean_aggregation_mean <- scuttle::aggregateAcrossCells(x = as(spe,                                                        "SingleCellExperiment"), ids = SummarizedExperiment::colData(spe)$population_name_1,  statistics = "mean", use.assay.type = "data",   subset.row = rowSubset(spe))
+
+mean_aggregation_sum <- scuttle::aggregateAcrossCells(x = as(spe,                                                        "SingleCellExperiment"), ids = SummarizedExperiment::colData(spe)$population_name_1,  statistics = "sum", use.assay.type = "data",   subset.row = rowSubset(spe))
+
+
+```
+
+```{r}
+png("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/heatmap figures/pheatmap_mean_20250710_2_rb_fix.png", res = 600, width =24, height = 22, unit = "cm")
+pheatmap::pheatmap(assay(mean_aggregation_mean, "data"), scale="row", cluster_rows = T, cluster_cols = F, color = colorRampPalette(c("navy", "white", "firebrick3"))(50), fontsize = 16, fontsize_row = 14, gaps_col = c( 6, 8, 13, 17) )
+dev.off()
+
+
+png("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/heatmap figures/pheatmap_sum_20250710_2_rb_fix.png", res = 600, width =24, height = 22, unit = "cm")
+pheatmap::pheatmap(assay(mean_aggregation_sum, "data"), scale="row", cluster_rows = T, cluster_cols = F, color = colorRampPalette(c("navy", "white", "firebrick3"))(50), fontsize = 16, fontsize_row = 14, gaps_col = c(6, 8, 13, 17),)
+dev.off()
+```
+
