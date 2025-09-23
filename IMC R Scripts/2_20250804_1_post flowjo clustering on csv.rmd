@@ -1,0 +1,84 @@
+---
+title: "20250804 Step 1 post flowjo first clustering"
+author: "Elizabeth Dunn"
+date: "2025-08-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(FuseSOM)
+library(Statial)
+library(dplyr)
+library(ggplot2)
+library(readxl)
+library(SpatialExperiment)
+library(cytomapper)
+library(cytoviewer)
+```
+
+```{r}
+# Loading in my CSV data from FlowJo --------------------------------------
+set.seed(123)
+#T cells
+# Set your working directory
+setwd("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/5_R_analysis/FlowJo2/Export")
+#load csv and check contents
+data_flowjo <- read.csv("20250506_1_workflow 2 minus junk all cells.csv")
+dim(data_flowjo)
+colnames(data_flowjo)
+```
+
+```{r}
+flowjoMarkers <- c( 'x154Sm_CD45','x170Er_CD3','x141Pr_CD20','x153Eu_CD68', 'x158Gd_CD56', 'x152Sm_Anti_Cy3_Langerin', 'x155Gd_CD31', 
+                    'x147Sm_Podoplanin', 'x175Lu_CD303', 'x160Gd_CD14', 'x172Yb_Siglec1', 'x167Er_CD11c', 'x171Yb_CD1c', 'x169Tm_Anti_Cy5_Clec9a',
+                   'x151Eu_CD21', 'x148Nd_CD16', 'x174Yb_HLA_DR')
+names(data_flowjo)[names(data_flowjo) == 'manual_gating_phenotype'] <- 'CellType'
+flowjoRes <- runFuseSOM(data = data_flowjo, markers = flowjoMarkers, 
+                       numClusters = 14)
+table(flowjoRes$clusters)/sum(table(flowjoRes$clusters))
+flowjoHeat <- FuseSOM::markerHeatmap(data = data_flowjo, markers = flowjoMarkers,
+                                    clusters = flowjoRes$clusters, clusterMarkers = TRUE)
+
+```
+
+```{r}
+#add the clusters back onto the dataframe
+data_flowjo$Clusters<-flowjoRes$clusters
+
+population=data_flowjo %>%
+  mutate(population_name=case_when(
+    Clusters=="cluster_1" ~ "LEC",
+    Clusters== "cluster_2" ~"follicular B cells",
+    Clusters=="cluster_3"~ "extrafollicular B cells?",
+    Clusters=="cluster_4" ~ "NK/cDC2",
+    Clusters=="cluster_5"~"langerin",
+    Clusters=="cluster_6"~"mono/mac",
+    Clusters=="cluster_7"~"cDC2",
+    Clusters=="cluster_8"~"CD169+ macs",
+    Clusters=="cluster_9"~"cDC1",
+    Clusters=="cluster_10"~"T cell",
+    Clusters=="cluster_11"~"medullary mac",
+    Clusters=="cluster_12"~"pDC",
+    Clusters=="cluster_13"~"BEC",
+    Clusters=="cluster_14"~"undefined CD45-",
+    
+    
+    
+  ))
+```
+
+```{r}
+#export again as a csv with the cluster number now added as an extra column
+write.csv(population, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/5_R_analysis/FlowJo2/Export/20250408 all cells.csv")
+```
+
+
+```{r}
+
+```
+
