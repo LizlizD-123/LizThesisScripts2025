@@ -1,0 +1,559 @@
+---
+title: "Final statistics_20250813"
+author: "Elizabeth Dunn"
+date: "2025-08-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dittoSeq)
+library(scater)
+library(patchwork)
+library(cowplot)
+library(viridis)
+library(SpatialExperiment)
+library(tidySpatialExperiment)
+library(imcRtools)
+library(ggpubr)
+library(dplyr)
+library(multcomp)
+library(rstatix)
+library(dunn.test)
+library(lisaClust)
+#library(spicyR)
+library(multcompView)
+
+
+```
+
+```{r}
+spe<- readRDS("C:/Users/lizwork/Documents/IMCRanalysis/20250523_final_cluster_fixed_adipo_RO_dim.rds")
+#clean up the cells a little bit more, don't want cells to have NA in "total spots estimated"
+spe$total_estimated_spots_fixed<- ifelse(
+is.na(spe$total.estimated.spots), 
+"0", spe$total.estimated.spots)
+
+unique(spe$total_estimated_spots_fixed)
+
+#now also need to rename "parenchyma" to "T cell zone" as this is more accurate
+#also forgot to change the name of the annotations, change to reflect the class in brackets
+spe <- spe |>
+  mutate(Parent = case_when(
+    Parent == "Annotation (B cell zone)" ~ "B cell zone",
+    Parent == "Annotation (Capsule)" ~ "Capsule",
+    Parent == "Annotation (Parenchyma)" ~ "T cell zone",
+    Parent == "Annotation (Empty)" ~ "Empty",
+    Parent == "B cell zone" ~ "B cell zone",
+    Parent == "Capsule" ~ "Capsule",
+    Parent == "Parenchyma" ~ "T cell zone",
+    Parent == "Empty" ~ "Empty",
+    Parent == "Root object (Image)" ~ "Empty", # cells on edges that are in empty areas, did not get a classification
+    Parent == "NA" ~ "Empty" # cells on edges that are in empty areas, did not get a classification
+  ))
+
+# now we want to remove any cells from the "empty" area, they are not of interest/also not cells
+#clean up the cells a little bit more, don't want cells that have NA in "total spots estimated", these are cells that are again out of bounds so could not calculate
+
+
+
+
+
+
+spe<-spe[,spe$Parent!="Empty"]
+length(spe$uID)
+
+spe <- spe|>
+  mutate(DonorID = case_when(
+    DonorID == "LN179" ~ "LN179",
+    DonorID == "LN163.1" ~ "LN163.1",
+    DonorID == "LN162.1" ~ "LN163.1",
+    DonorID == "LN158.1" ~ "LN158.1",
+    DonorID == "LN146.1" ~ "LN146.1",
+    DonorID == "LN70" ~ "LN70",
+    DonorID == "LN212" ~ "LN212",
+    DonorID == "LN217" ~ "LN217",
+    DonorID == "LN223.2" ~ "LN223.2", # cells on edges that are in empty areas, did not get a classification
+    DonorID == "LN154" ~ "LN154" # cells on edges that are in empty areas, did not get a classification
+  ))
+
+dittoBarPlot(spe, var = "treatment", group.by = "DonorID")
+
+#based on the above, we want to remove LN154 and LN217 from this analysis, as they are mock only. Also remove LN212 and LN223.2, because they do not have R848. 
+#Can add back #in later if we want to do things with just mock samples, like neighbourhood analysis in mock only.
+#20250610 added them back in as I am using a lmer mixed effects model, can put in random intercept?
+spe<-spe[, colData(spe)$DonorID!="LN154"]
+spe<-spe[, colData(spe)$DonorID!="LN217"]
+# spe<-spe[, colData(spe)$DonorID!="LN212"]
+# spe<-spe[, colData(spe)$DonorID!="LN223.2"]
+
+dittoBarPlot(spe, var = "treatment", group.by = "DonorID", legend.show = T, legend.title = "Treatment", xlab = "Donor", main = "A")
+
+
+
+ggsave("20250624_percent cells by treatment_600.png", dpi= "retina", height = 7, width = 10)
+
+dittoBarPlot(spe, var = "ImageID", group.by = "DonorID", legend.show = T, legend.title = "Image", xlab = "Donor", main = "B")
+
+
+
+ggsave("20250624_percent cells by DonorID_600.png", dpi= "retina", height = 7, width = 10)
+
+#now clean up the channel names so I can make nicer graphs
+
+unique(rownames(spe))
+
+rownames(spe)<- c("Vimentin", "115In", "CD20",            
+"Collagen III","143Nd", "IFN gamma"
+,"CD83","CD8","Podoplanin","CD16","149Sm", "CD21"                   
+, "Langerin", "CD68","CD45" , "CD31", "CXCR3", "CD56","CCR7", "CD14", "FXIIIA"                
+, "CCR6", "CD11b", "CD45RO", "NaKATPase", "Perilipin1", "CD11c",                
+"Ki67","Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
+"HLA_DR","CD303", "CXCR5", "DNA1", "DNA2")
+
+unique(rownames(spe))
+
+rowSubset (spe)<- c("Vimentin",  "CD20",            
+"Collagen III", "IFN gamma"
+,"CD83","CD8","Podoplanin","CD16", "151Eu_CD21"                   
+, "Langerin", "CD68","CD45" , "CD31", "CXCR3", "CD56","CCR7", "CD14", "FXIIIA"                
+, "CCR6", "CD11b", "CD45RO", "Perilipin1", "CD11c",                
+"Ki67","Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
+"HLA_DR","CD303", "CXCR5")      
+
+
+#saveRDS (spe, "C:/Users/lizwork/Documents/IMCRanalysis/20250605_final_cluster_fixed_adipo_RO_subset_stats.rds")
+```
+
+```{r}
+setwd("C://Users/lizwork/Documents/IMCRanalysis")
+```
+
+```{r}
+#by Cluster
+
+set.seed(123)
+
+spe$final_cluster_2<-  factor(spe$final_cluster, levels=c("Adipocyte", "BEC", "FDC","Fibroblast", "FRC", "LEC", "CD169+ macs", "CD169- macs", "Mono/mac", "Extrafollicular B cell", "Follicular B cell", "Memory CD4+ T cell", "Naive CD4+ T cell", "Memory CD8+ T cell", "Naive CD8+ T cell", "NK/Innate Lymphocytes", "Langerin+ cDC2", "cDC1", "cDC2", "pDC"))
+
+unique(spe$final_cluster_2)
+
+colours<- c("#99cc99", "#edce30", "#ea61eb", "#80b380","#c0df25", "#dfe315", "#ff6f0d" ,"#f06b0b", "#c43c4c", "#3f2cde", "#1a0f74", "#7896af", "#afb7cc", "#fd9a6a", "#f66fbe", "#48e9f6","#9c97f2", "#5ff2a3", "#e42e9e","#56147d")
+
+
+
+
+p5 <- dittoDimPlot(spe, var = "final_cluster", reduction.use = "UMAP_full", , size = 0.2, labels.size = 14, raster.dpi = 1200, sub = "Base Cell Type", main = NULL, legend.size = 5, shape.legend.size = 15, opacity = 0.7)
+p5
+ggsave("20250824_UMAP_cluster.png", dpi= "retina", height = 6, width = 8 )
+
+?dittoDimPlot
+
+p5_2 <- dittoDimPlot(spe, var = "final_cluster_2", reduction.use = "UMAP_full", , size = 0.2, labels.size = 14, raster.dpi = 1200, sub = "Base Cell Type", main = NULL, legend.size = 5, shape.legend.size = 15, color.panel = colours)
+p5_2
+ggsave("20250825_UMAP_cluster_final_2.tif", dpi= "retina", height = 6, width = 8 )
+
+?dittoDimPlot
+```
+
+```{r}
+#now to look at proportions
+
+# I asked usyd copilot "Using the lme4 package in the programming language R, how to use a mixed effect model to test the difference in proportions of cell types, by four treatment groups?" and edited the output from there
+
+library(lme4)
+library(dplyr)
+library(emmeans)
+library(ggplot2)
+library(dplyr)
+library(stringr)
+
+df <- colData(spe) %>%
+  as.data.frame() %>%
+  group_by(DonorID, treatment, final_cluster) %>%
+  summarise(counts = n(), .groups = "drop_last") %>%
+  mutate(total = sum(counts)) %>%
+  mutate(percent = 100 * counts / total)%>%
+  filter(treatment!= "T0h")
+
+
+df$treatment_factor<- factor(df$treatment, levels=c("mock", "AS01", "R848"))
+
+saveRDS(df, "df_forHarry_percent_groupbyDonorID.rds")
+
+# Assuming your data is in long format
+# Columns: cell_type, treatment, subject, cell_count, total_cells
+
+cell_types <- unique(df$final_cluster)
+lrt_results <- data.frame()
+all_contrasts<- data.frame()
+
+for (ct in cell_types) {
+  data_ct <- df %>% filter(final_cluster == ct)
+  
+  # Fit full and reduced models
+  full_model <- lmer(percent ~ treatment + (1 | DonorID),
+                      data = data_ct)
+  reduced_model <- update(full_model, . ~ . - treatment)
+  
+  # Likelihood ratio test
+  lrt <- anova(reduced_model, full_model)
+  p_val <- lrt$`Pr(>Chisq)`[2]
+  
+  lrt_results <- rbind(lrt_results, data.frame(final_cluster = ct, p_value = p_val))
+  
+  emmeans_results <- emmeans(full_model, pairwise ~ treatment, adjust = "tukey")
+  contrasts_df <- as.data.frame(emmeans_results$contrasts) 
+  contrasts_df$cell_type <- ct
+  all_contrasts <- rbind(all_contrasts, contrasts_df)
+
+}
+
+
+
+plot_data <- df %>%
+  group_by(final_cluster, treatment_factor, DonorID) %>%
+  summarise(percent = (sum(counts) / sum(total)*100), .groups = "drop") %>%
+  left_join(lrt_results, by = "final_cluster")
+
+# Create p-value labels
+pval_labels <- lrt_results %>%
+  mutate(label = paste0("p = ", signif(p_value, 3)))
+
+pval_labels_posthoc <- all_contrasts %>%
+  mutate(label = signif(p.value, digits=3))
+
+
+
+pval_to_stars <- function(p) {
+  if (p < 0.001) return("***")
+  else if (p < 0.01) return("**")
+  else if (p < 0.05) return("*")
+  else return("ns")
+}
+
+pval_labels <- lrt_results %>%
+  mutate(label = sapply(p_value, pval_to_stars))
+
+pval_labels_posthoc <- all_contrasts %>%
+  mutate(label = sapply(p.value, pval_to_stars))
+
+
+
+
+# Plot
+# ggplot(plot_data, aes(x = treatment, y = percent, fill = treatment)) +
+#   geom_boxplot() +
+#   facet_wrap(~ final_cluster, scales = "free_y") +
+#   geom_text(data = pval_labels, aes(x = 2.5, y = max(plot_data$percent+0.5), label = label),
+#             inherit.aes = FALSE, vjust = 1.5) +
+#   labs(title = "Percent Cell Types by Treatment Group",
+#        x = "Treatment Group", y = "Proportion") +
+#   theme_classic()
+
+
+#put this into the other one imcrtools to pick out significant ones
+all_contrasts %>%
+filter(p.value < 0.05)
+
+max_percent <- plot_data %>%
+  group_by(final_cluster) %>%
+  summarise(max = max(percent))
+
+ groups <- as.data.frame(t(as.data.frame(strsplit(dtest$comparisons, " - "))))
+ 
+all_contrasts [c ('group1', 'group2')]<- str_split_fixed(all_contrasts$contrast, '-',2)
+all_contrasts$y.position <-max_percent$max
+all_contrasts$p<- all_contrasts$p.value
+
+
+plot1<-ggplot(plot_data, aes(x = treatment_factor, y = percent)) +
+  geom_boxplot(outlier.shape = NA, aes(fill= treatment_factor), position = "dodge") +
+  facet_wrap(~ final_cluster, scales= "free_y") +
+  labs(title = "Percent Cell Types by Treatment Group",
+       x = "Treatment Group", y = "Percent", element_text(size=24)) +
+  theme_classic(base_size = 14)
+
+plot1
+
+ggsave("20250807_comapring mixed effect models test_3.tif", dpi= "retina", height = 11, width = 12 )
+
+# plot2<-ggplot(plot_data, aes(x = treatment_factor, y = percent)) +
+#   geom_boxplot(aes(fill= treatment_factor), position = "dodge") +
+#   facet_wrap(~ final_cluster, scales= "fixed", shrink = T, ) +
+#   labs(title = "Percent Cell Types by Treatment Group",
+#        x = "Treatment Group", y = "Proportion") +
+#   theme_classic()
+# 
+# plot2
+
+
+?stat_pvalue_manual
+
+ggsave("20250714_comapring mixed effect models test_2.png", dpi= "retina", height = 12, width = 12 )
+
+# ggplot(plot_data, aes(x = treatment, y = percent, fill = treatment)) +
+#   geom_boxplot(position = 'dodge') +
+#   facet_wrap(~ final_cluster, scales = "free_y")  +
+#   labs(title = "Percent Cell Types by Treatment Group",
+#        x = "Treatment Group", y = "Proportion") +
+#   theme_classic() +
+#   geom_signif(comparisons = list(c("AS01", "mock"), c("AS01", "R848")) annotations = signif(p.values, digits = 2)
+# 
+# 
+# ggsave("20250506_comapring mixed effect models test_stat.png", dpi= "print", height = 7, width = 12 )
+
+
+#So we see differences in the number of follicular B and naive T cells, I strongly suspect this is due to donor differnces (some have more B cell zones than others)
+#I want to make a graph to show this
+#
+
+
+# ggplot(plot_data, aes(x = treatment, y = percent, colour = DonorID)) +
+#   geom_jitter(size= 1) +
+#   facet_wrap(~ final_cluster, scales = "free_y") +
+#   geom_text(data = pval_labels, aes(x = 2.5, y = Inf, label = label),
+#             inherit.aes = FALSE, vjust = 1.5) +
+#   labs(title = "Percent Cell Types by Treatment Group",
+#        x = "Treatment Group", y = "Proportion") +
+#   theme_classic()
+# 
+# ?facet_wrap
+# 
+# s
+# ggsave("20250506_comapring mixed effect models test_jitter.png", dpi= "print", height = 7, width = 12 )
+# 
+# unique(spe$final_cluster)
+```
+
+```{r}
+#heatmap
+spe <- spe |>
+  mutate(final_cluster= case_when(
+    
+    
+    final_cluster == "NK/Innate Lymphocytes" & treatment == "AS01" ~ "NK/Innate Lymphocytes_AS01",
+    final_cluster == "NK/Innate Lymphocytes" & treatment == "mock" ~ "NK/Innate Lymphocytes_Mock",
+    final_cluster == "NK/Innate Lymphocytes" & treatment == "R848" ~ "NK/Innate Lymphocytes_R848",
+    final_cluster == "NK/Innate Lymphocytes" & treatment == "T0h" ~ "NK/Innate Lymphocytes_T0h",
+    final_cluster == "Follicular B cell" & treatment == "AS01" ~ "Follicular B cell_AS01",
+    final_cluster == "Follicular B cell" & treatment == "mock" ~ "Follicular B cell_Mock",
+    final_cluster == "Follicular B cell" & treatment == "R848" ~ "Follicular B cell_R848",
+    final_cluster == "Follicular B cell" & treatment == "T0h" ~ "Follicular B cell_T0h",
+    final_cluster == "Extrafollicular B cell" & treatment == "AS01" ~ "Extrafollicular B cell_AS01",
+    final_cluster == "Extrafollicular B cell" & treatment == "mock" ~ "Extrafollicular B cell_Mock",
+    final_cluster == "Extrafollicular B cell" & treatment == "R848" ~ "Extrafollicular B cell_R848",
+    final_cluster == "Extrafollicular B cell" & treatment == "T0h" ~ "Extrafollicular B cell_T0h",
+    final_cluster == "pDC" & treatment == "AS01" ~ "pDC_AS01",
+    final_cluster == "pDC" & treatment == "mock" ~ "pDC_Mock",
+    final_cluster == "pDC" & treatment == "R848" ~ "pDC_R848",
+    final_cluster == "pDC" & treatment == "T0h" ~ "pDC_T0h",
+    final_cluster == "Langerin+ cDC2" & treatment == "AS01" ~ "Langerin+ cDC2_AS01",
+    final_cluster == "Langerin+ cDC2" & treatment == "mock" ~ "Langerin+ cDC2_Mock",
+    final_cluster == "Langerin+ cDC2" & treatment == "R848" ~ "Langerin+ cDC2_R848",
+    final_cluster == "Langerin+ cDC2" & treatment == "T0h" ~ "Langerin+ cDC2_T0h",
+    final_cluster == "cDC2" & treatment == "AS01" ~ "cDC2_AS01",
+    final_cluster == "cDC2" & treatment == "mock" ~ "cDC2_Mock",
+    final_cluster == "cDC2" & treatment == "R848" ~ "cDC2_R848",
+    final_cluster == "cDC2" & treatment == "T0h" ~ "cDC2_T0h",
+    final_cluster == "CD169- macs" & treatment == "AS01" ~ "CD169- macs_AS01",
+    final_cluster == "CD169- macs" & treatment == "mock" ~ "CD169- macs_Mock",
+    final_cluster == "CD169- macs" & treatment == "R848" ~ "CD169- macs_R848",
+    final_cluster == "CD169- macs" & treatment == "T0h" ~ "CD169- macs_T0h",
+    final_cluster == "cDC1" & treatment == "AS01" ~ "cDC1_AS01",
+    final_cluster == "cDC1" & treatment == "mock" ~ "cDC1_Mock",
+    final_cluster == "cDC1" & treatment == "R848" ~ "cDC1_R848",
+    final_cluster == "cDC1" & treatment == "T0h" ~ "cDC1_T0h",
+    final_cluster == "CD169+ macs" & treatment == "AS01" ~ "CD169+ macs_AS01",
+    final_cluster == "CD169+ macs" & treatment == "mock" ~ "CD169+ macs_Mock",
+    final_cluster == "CD169+ macs" & treatment == "R848" ~ "CD169+ macs_R848",
+    final_cluster == "CD169+ macs" & treatment == "T0h" ~ "CD169+ macs_T0h",
+    final_cluster == "Mono/mac" & treatment == "AS01" ~ "Mono/mac_AS01",
+    final_cluster == "Mono/mac" & treatment == "mock" ~ "Mono/mac_Mock",
+    final_cluster == "Mono/mac" & treatment == "R848" ~ "Mono/mac_R848",
+    final_cluster == "Mono/mac" & treatment == "T0h" ~ "Mono/mac_T0h",
+    final_cluster == "Memory CD8+ T cell" & treatment == "AS01" ~ "Memory CD8+ T cell_AS01",
+    final_cluster == "Memory CD8+ T cell" & treatment == "mock" ~ "Memory CD8+ T cell_Mock",
+    final_cluster == "Memory CD8+ T cell" & treatment == "R848" ~ "Memory CD8+ T cell_R848",
+    final_cluster == "Memory CD8+ T cell" & treatment == "T0h" ~ "Memory CD8+ T cell_T0h",
+    final_cluster == "Naive CD8+ T cell" & treatment == "AS01" ~ "Naive CD8+ T cell_AS01",
+    final_cluster == "Naive CD8+ T cell" & treatment == "mock" ~ "Naive CD8+ T cell_Mock",
+    final_cluster == "Naive CD8+ T cell" & treatment == "R848" ~ "Naive CD8+ T cell_R848",
+    final_cluster == "Naive CD8+ T cell" & treatment == "T0h" ~ "Naive CD8+ T cell_T0h",
+    final_cluster == "Memory CD4+ T cell" & treatment == "AS01" ~ "Memory CD4+ T cell_AS01",
+    final_cluster == "Memory CD4+ T cell" & treatment == "mock" ~ "Memory CD4+ T cell_Mock",
+    final_cluster == "Memory CD4+ T cell" & treatment == "R848" ~ "Memory CD4+ T cell_R848",
+    final_cluster == "Memory CD4+ T cell" & treatment == "T0h" ~ "Memory CD4+ T cell_T0h",
+    final_cluster == "Naive CD4+ T cell" & treatment == "AS01" ~ "Naive CD4+ T cell_AS01",
+    final_cluster == "Naive CD4+ T cell" & treatment == "mock" ~ "Naive CD4+ T cell_Mock",
+    final_cluster == "Naive CD4+ T cell" & treatment == "R848" ~ "Naive CD4+ T cell_R848",
+    final_cluster == "Naive CD4+ T cell" & treatment == "T0h" ~ "Naive CD4+ T cell_T0h",
+    final_cluster == "Fibroblast" & treatment == "AS01" ~ "Fibroblast_AS01",
+    final_cluster == "Fibroblast" & treatment == "mock" ~ "Fibroblast_Mock",
+    final_cluster == "Fibroblast" & treatment == "R848" ~ "Fibroblast_R848",
+    final_cluster == "Fibroblast" & treatment == "T0h" ~ "Fibroblast_T0h",
+    final_cluster == "FRC" & treatment == "AS01" ~ "FRC_AS01",
+    final_cluster == "FRC" & treatment == "mock" ~ "FRC_Mock",
+    final_cluster == "FRC" & treatment == "R848" ~ "FRC_R848",
+    final_cluster == "FRC" & treatment == "T0h" ~ "FRC_T0h",
+    final_cluster == "Adipocyte" & treatment == "AS01" ~ "Adipocyte_AS01",
+    final_cluster == "Adipocyte" & treatment == "mock" ~ "Adipocyte_Mock",
+    final_cluster == "Adipocyte" & treatment == "R848" ~ "Adipocyte_R848",
+    final_cluster == "Adipocyte" & treatment == "T0h" ~ "Adipocyte_T0h",
+    final_cluster == "LEC" & treatment == "AS01" ~ "LEC_AS01",
+    final_cluster == "LEC" & treatment == "mock" ~ "LEC_Mock",
+    final_cluster == "LEC" & treatment == "R848" ~ "LEC_R848",
+    final_cluster == "LEC" & treatment == "T0h" ~ "LEC_T0h",
+    final_cluster == "BEC" & treatment == "AS01" ~ "BEC_AS01",
+    final_cluster == "BEC" & treatment == "mock" ~ "BEC_Mock",
+    final_cluster == "BEC" & treatment == "R848" ~ "BEC_R848",
+    final_cluster == "BEC" & treatment == "T0h" ~ "BEC_T0h",
+    final_cluster == "FDC" & treatment == "AS01" ~ "FDC_AS01",
+    final_cluster == "FDC" & treatment == "mock" ~ "FDC_Mock",
+    final_cluster == "FDC" & treatment == "R848" ~ "FDC_R848",
+    final_cluster == "FDC" & treatment == "T0h" ~ "FDC_T0h"
+
+  ))
+```
+
+```{r}
+##makng heatmaps
+##1 subset to remove dna and ccr7 etc and then update the cell names to match treatment, don't split by treatment
+##2 then also make heatmap of cells of the ccr7 ccr6 etc only, take out stromal cells becasue we don't care about them for this second plot
+
+library(viridis)
+
+rowSubset (spe)<- c("CD20",            
+"Collagen III"
+,"CD8","Podoplanin","CD16", "CD21"                   
+, "Langerin", "CD68","CD45" , "CD31", "CD56", "CD14", "FXIIIA"                
+, "CD11b", "CD45RO", "Perilipin1", "CD11c",                
+"Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
+"CD303")
+
+
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+
+
+
+spe$final_cluster_2<- factor(spe$final_cluster, levels= c( "NK/Innate Lymphocytes_Mock","NK/Innate Lymphocytes_AS01","NK/Innate Lymphocytes_R848","NK/Innate Lymphocytes_T0h",
+"Follicular B cell_Mock", "Follicular B cell_AS01","Follicular B cell_R848","Follicular B cell_T0h",
+"Extrafollicular B cell_Mock", "Extrafollicular B cell_AS01", "Extrafollicular B cell_R848", "Extrafollicular B cell_T0h",
+"pDC_Mock","pDC_AS01", "pDC_R848","pDC_T0h",
+"Langerin+ cDC2_Mock","Langerin+ cDC2_AS01","Langerin+ cDC2_R848", "Langerin+ cDC2_T0h",
+"cDC2_Mock","cDC2_AS01","cDC2_R848","cDC2_T0h",
+"CD169- macs_Mock","CD169- macs_AS01","CD169- macs_R848", "CD169- macs_T0h",
+"cDC1_Mock", "cDC1_AS01", "cDC1_R848","cDC1_T0h",
+"CD169+ macs_Mock", "CD169+ macs_AS01","CD169+ macs_R848", "CD169+ macs_T0h",
+"Mono/mac_Mock","Mono/mac_AS01","Mono/mac_R848","Mono/mac_T0h", 
+"Memory CD8+ T cell_Mock", "Memory CD8+ T cell_AS01","Memory CD8+ T cell_R848","Memory CD8+ T cell_T0h",
+"Naive CD8+ T cell_Mock", "Naive CD8+ T cell_AS01", "Naive CD8+ T cell_R848","Naive CD8+ T cell_T0h",
+"Memory CD4+ T cell_Mock", "Memory CD4+ T cell_AS01","Memory CD4+ T cell_R848","Memory CD4+ T cell_T0h",
+"Naive CD4+ T cell_Mock","Naive CD4+ T cell_AS01","Naive CD4+ T cell_R848", "Naive CD4+ T cell_T0h",
+"Fibroblast_Mock", "Fibroblast_AS01","Fibroblast_R848", "Fibroblast_T0h",
+"FRC_Mock","FRC_AS01", "FRC_R848", "FRC_T0h",
+"Adipocyte_Mock","Adipocyte_AS01", "Adipocyte_R848","Adipocyte_T0h",
+"LEC_Mock", "LEC_AS01", "LEC_R848","LEC_T0h",
+"BEC_Mock", "BEC_AS01","BEC_R848", "BEC_T0h",
+"FDC_Mock", "FDC_AS01","FDC_R848","FDC_T0h"
+
+  ))
+
+mean_aggregation_mean <- scuttle::aggregateAcrossCells(x = as(spe,                                                        "SingleCellExperiment"), ids = SummarizedExperiment::colData(spe)$final_cluster_2,  statistics = "mean", use.assay.type = "data",   subset.row = rowSubset(spe))
+
+mean_aggregation_sum <- scuttle::aggregateAcrossCells(x = as(spe,                                                        "SingleCellExperiment"), ids = SummarizedExperiment::colData(spe)$final_cluster_2,  statistics = "sum", use.assay.type = "data",   subset.row = rowSubset(spe))
+
+
+png("C://Users/lizwork/Documents/IMCRanalysis/pheatmap_mean_20250710_2.png", res = 600, width =30, height = 16, unit = "cm")
+pheatmap::pheatmap(assay(mean_aggregation_mean, "data"), scale="row", cluster_rows = F, cluster_cols = F, color = viridis (10), fontsize = 8, fontsize_row = 8, gaps_col = c(4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80))
+dev.off()
+
+png("C://Users/lizwork/Documents/IMCRanalysis/pheatmap_mean_20250710_2_rb.png", res = 600, width =30, height = 16, unit = "cm")
+pheatmap::pheatmap(assay(mean_aggregation_mean, "data"), scale="row", cluster_rows = F, cluster_cols = F, color = colorRampPalette(c("navy", "white", "firebrick3"))(50), fontsize = 8, fontsize_row = 8, gaps_col = c(4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80))
+dev.off()
+
+tiff("C://Users/lizwork/Documents/IMCRanalysis/pheatmap_mean_20250806_2_rb_final.tiff", res = 600, width =40, height = 18, unit = "cm")
+pheatmap::pheatmap(assay(mean_aggregation_mean, "data"), scale="row", cluster_rows = T, cluster_cols = F, color = colorRampPalette(c("navy", "white", "firebrick3"))(50), fontsize = 12, fontsize_row = 12, gaps_col = c(4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80))
+dev.off()
+
+
+
+png("C://Users/lizwork/Documents/IMCRanalysis/pheatmap_mean_20250710_col_2.png", res = 600, width =30, height = 16, unit = "cm")
+pheatmap::pheatmap(assay(mean_aggregation_mean, "data"), scale="column", cluster_rows = F, cluster_cols = F, color = viridis (10), fontsize = 8, fontsize_row = 8, gaps_col = c(4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80))
+dev.off()
+
+
+png("C://Users/lizwork/Documents/IMCRanalysis/pheatmap_sum_20250710_2.png", res = 600, width =30, height = 16, unit = "cm")
+pheatmap::pheatmap(assay(mean_aggregation_sum, "data"), scale="row", cluster_rows = F, cluster_cols = F, color = viridis (10), fontsize = 8, fontsize_row = 8, gaps_col = c(4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80))
+dev.off()
+
+png("C://Users/lizwork/Documents/IMCRanalysis/pheatmap_sum_20250710_col_2.png", res = 600, width =30, height = 16, unit = "cm")
+pheatmap::pheatmap(assay(mean_aggregation_sum, "data"), scale="column", cluster_rows = F, cluster_cols = F, color = viridis (10), fontsize = 8, fontsize_row = 8, gaps_col = c(4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80))
+dev.off()
+
+
+##now just immune cells, but also no B cells becuase we don't care about them. Don't confuse people by showing them if we aren't going to tak about them later
+
+rowSubset (spe)<- c( "IFN gamma"
+,"CD83", "CXCR3", "CCR7", "CCR6",             
+"HLA_DR","CXCR5")  
+
+spe_subset<-spe [,spe$final_cluster_2 == "NK/Innate Lymphocytes_Mock"|spe$final_cluster_2 == "NK/Innate Lymphocytes_AS01"|spe$final_cluster_2 =="NK/Innate Lymphocytes_R848"|spe$final_cluster_2 =="NK/Innate Lymphocytes_T0h"|spe$final_cluster_2 ==
+"pDC_Mock"|spe$final_cluster_2 =="pDC_AS01"|spe$final_cluster_2 == "pDC_R848"|spe$final_cluster_2 =="pDC_T0h"|spe$final_cluster_2 ==
+"Langerin+ cDC2_Mock"|spe$final_cluster_2 =="Langerin+ cDC2_AS01"|spe$final_cluster_2 =="Langerin+ cDC2_R848"|spe$final_cluster_2 == "Langerin+ cDC2_T0h"|spe$final_cluster_2 ==
+"cDC2_Mock"|spe$final_cluster_2 =="cDC2_AS01"|spe$final_cluster_2 =="cDC2_R848"|spe$final_cluster_2 =="cDC2_T0h"|spe$final_cluster_2 ==
+"CD169- macs_Mock"|spe$final_cluster_2 =="CD169- macs_AS01"|spe$final_cluster_2 =="CD169- macs_R848"|spe$final_cluster_2 == "CD169- macs_T0h"|spe$final_cluster_2 ==
+"cDC1_Mock"|spe$final_cluster_2 == "cDC1_AS01"|spe$final_cluster_2 == "cDC1_R848"|spe$final_cluster_2 =="cDC1_T0h"|spe$final_cluster_2 ==
+"CD169+ macs_Mock"|spe$final_cluster_2 == "CD169+ macs_AS01"|spe$final_cluster_2 =="CD169+ macs_R848"|spe$final_cluster_2 == "CD169+ macs_T0h"|spe$final_cluster_2 ==
+"Mono/mac_Mock"|spe$final_cluster_2 =="Mono/mac_AS01"|spe$final_cluster_2 =="Mono/mac_R848"|spe$final_cluster_2 =="Mono/mac_T0h"|spe$final_cluster_2 == 
+"Memory CD8+ T cell_Mock"|spe$final_cluster_2 == "Memory CD8+ T cell_AS01"|spe$final_cluster_2 =="Memory CD8+ T cell_R848"|spe$final_cluster_2 =="Memory CD8+ T cell_T0h"|spe$final_cluster_2 ==
+"Naive CD8+ T cell_Mock"|spe$final_cluster_2 == "Naive CD8+ T cell_AS01"|spe$final_cluster_2 == "Naive CD8+ T cell_R848"|spe$final_cluster_2 =="Naive CD8+ T cell_T0h"|spe$final_cluster_2 ==
+"Memory CD4+ T cell_Mock"|spe$final_cluster_2 == "Memory CD4+ T cell_AS01"|spe$final_cluster_2 =="Memory CD4+ T cell_R848"|spe$final_cluster_2 =="Memory CD4+ T cell_T0h"|spe$final_cluster_2 ==
+"Naive CD4+ T cell_Mock"|spe$final_cluster_2 =="Naive CD4+ T cell_AS01"|spe$final_cluster_2 =="Naive CD4+ T cell_R848"|spe$final_cluster_2 == "Naive CD4+ T cell_T0h"
+
+]
+
+
+mean_aggregation_mean_subset <- scuttle::aggregateAcrossCells(x = as(spe_subset,                                                        "SingleCellExperiment"), ids = SummarizedExperiment::colData(spe_subset)$final_cluster_2,  statistics = "mean", use.assay.type = "data",   subset.row = rowSubset(spe))
+
+mean_aggregation_sum_subset <- scuttle::aggregateAcrossCells(x = as(spe_subset,                                                        "SingleCellExperiment"), ids = SummarizedExperiment::colData(spe_subset)$final_cluster_2,  statistics = "sum", use.assay.type = "data",   subset.row = rowSubset(spe))
+
+
+png("C://Users/lizwork/Documents/IMCRanalysis/pheatmap_mean_20250710_subset.png", res = 600, width =30, height = 16, unit = "cm")
+pheatmap::pheatmap(assay(mean_aggregation_mean_subset, "data"), scale="row", cluster_rows = F, cluster_cols = F, color = viridis (10), fontsize = 8, fontsize_row = 8, gaps_col = c(4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48))
+dev.off()
+
+png("C://Users/lizwork/Documents/IMCRanalysis/pheatmap_mean_20250806_subset_rb_final.png", res = 600, width =20, height = 8, unit = "cm")
+pheatmap::pheatmap(assay(mean_aggregation_mean_subset, "data"), scale="row", cluster_rows = T, cluster_cols = F, color = colorRampPalette(c("navy", "white", "firebrick3"))(50), fontsize = 8, fontsize_row = 8, gaps_col = c(4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48))
+
+dev.off()
+
+tiff("C://Users/lizwork/Documents/IMCRanalysis/pheatmap_mean_20250806_subset_rb_final_2.tiff", res = 600, width =20, height = 8, unit = "cm")
+pheatmap::pheatmap(assay(mean_aggregation_mean_subset, "data"), scale="row", cluster_rows = T, cluster_cols = F, color = colorRampPalette(c("navy", "white", "firebrick3"))(50), fontsize = 8, fontsize_row = 8, gaps_col = c(4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48))
+
+dev.off()
+
+png("C://Users/lizwork/Documents/IMCRanalysis/pheatmap_mean_20250710_col_subset.png", res = 600, width =30, height = 16, unit = "cm")
+pheatmap::pheatmap(assay(mean_aggregation_mean_subset, "data"), scale="column", cluster_rows = F, cluster_cols = F, color = viridis (10), fontsize = 8, fontsize_row = 8, gaps_col = c(4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48))
+dev.off()
+
+
+png("C://Users/lizwork/Documents/IMCRanalysis/pheatmap_sum_20250710_subset.png", res = 600, width =30, height = 16, unit = "cm")
+pheatmap::pheatmap(assay(mean_aggregation_sum_subset, "data"), scale="row", cluster_rows = F, cluster_cols = F, color = viridis (10), fontsize = 8, fontsize_row = 8, gaps_col = c(4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48))
+dev.off()
+
+png("C://Users/lizwork/Documents/IMCRanalysis/pheatmap_sum_20250710_col_subset.png", res = 600, width =30, height = 16, unit = "cm")
+pheatmap::pheatmap(assay(mean_aggregation_sum_subset, "data"), scale="column", cluster_rows = F, cluster_cols = F, color = viridis (10), fontsize = 8, fontsize_row = 8, gaps_col = c(4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48))
+dev.off()
+
+
+```
+
+```{r}
+
+```
+
