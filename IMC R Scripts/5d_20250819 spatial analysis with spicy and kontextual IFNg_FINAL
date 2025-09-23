@@ -1,0 +1,4432 @@
+---
+title: "Kontextual 20250626 just for spicy with IFNg"
+author: "Elizabeth Dunn"
+date: "2025-06-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidySpatialExperiment, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(IMComplete, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(tzdb, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(readr, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(tidyverse, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(SpatialExperiment, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(devtools, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(dplyr, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(tidyverse, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(pheatmap, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(FuseSOM, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(dittoSeq, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(Statial, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(lisaClust, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(spicyR, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(devtools, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+#devtools::install_github("SydneyBioX/spicyR")
+library(spicyR, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(viridis, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+library(imcRtools, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+#devtools::install_github("SydneyBioX/lisaClust")
+
+ # BiocManager::install("Statial")
+
+
+library(Statial, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+
+
+```
+
+```{r}
+set.seed(123)
+setwd("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis")
+
+spe<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250521_final_cluster_fixed_adipo_RO.rds")
+
+#clean the spe
+
+
+#clean up the cells a little bit more, don't want cells to have NA in "total spots estimated"
+spe$total_estimated_spots_fixed<- ifelse(
+is.na(spe$total.estimated.spots), 
+"0", spe$total.estimated.spots)
+spe <- spe |>
+  mutate(Parent = case_when(
+    Parent == "Annotation (B cell zone)" ~ "B cell zone",
+    Parent == "Annotation (Capsule)" ~ "Capsule",
+    Parent == "Annotation (Parenchyma)" ~ "Parenchyma",
+    Parent == "Annotation (Empty)" ~ "Empty",
+    Parent == "B cell zone" ~ "B cell zone",
+    Parent == "Capsule" ~ "Capsule",
+    Parent == "Parenchyma" ~ "Parenchyma",
+    Parent == "Empty" ~ "Empty",
+    Parent == "Root object (Image)" ~ "Empty", # cells on edges that are in empty areas, did not get a classification
+    Parent == "NA" ~ "Empty" # cells on edges that are in empty areas, did not get a classification
+  ))
+
+# now we want to remove any cells from the "empty" area, they are not of interest/also not cells
+#clean up the cells a little bit more, don't want cells that have NA in "total spots estimated", these are cells that are again out of bounds so could not calculate
+
+
+spe<-spe[,spe$Parent!="Empty"]
+length(spe$uID)
+
+spe <- spe|>
+  mutate(DonorID = case_when(
+    DonorID == "LN179" ~ "LN179",
+    DonorID == "LN163.1" ~ "LN163.1",
+    DonorID == "LN162.1" ~ "LN163.1",
+    DonorID == "LN158.1" ~ "LN158.1",
+    DonorID == "LN146.1" ~ "LN146.1",
+    DonorID == "LN70" ~ "LN70",
+    DonorID == "LN212" ~ "LN212",
+    DonorID == "LN217" ~ "LN217",
+    DonorID == "LN223.2" ~ "LN223.2", # cells on edges that are in empty areas, did not get a classification
+    DonorID == "LN154" ~ "LN154" # cells on edges that are in empty areas, did not get a classification
+  ))
+
+# dittoBarPlot(spe, var = "treatment", group.by = "DonorID")
+
+#based on the above, we want to remove LN154 and LN217 from this analysis, as they are mock only.
+
+spe<-spe[, colData(spe)$DonorID!="LN154"]
+spe<-spe[, colData(spe)$DonorID!="LN217"]
+# spe<-spe[, colData(spe)$DonorID!="LN212"]
+# spe<-spe[, colData(spe)$DonorID!="LN223.2"]
+
+# dittoBarPlot(spe, var = "treatment", group.by = "DonorID")
+# 
+# ggsave("20250523_percent cells by treatment.png", dpi= "print", height = 7, width = 10 )
+
+#now clean up the channel names so I can make nicer graphs
+
+unique(rownames(spe))
+
+rownames(spe)<- c("Vimentin", "115In", "CD20",            
+"Collagen III","143Nd", "IFN gamma"
+,"CD83","CD8","Podoplanin","CD16","149Sm", "CD21"                   
+, "Langerin", "CD68","CD45" , "CD31", "CXCR3", "CD56","CCR7", "CD14", "FXIIIA"                
+, "CCR6", "CD11b", "CD45RO", "NaKATPase", "Perilipin1", "CD11c",                
+"Ki67","Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
+"HLA_DR","CD303", "CXCR5", "DNA1", "DNA2")
+
+unique(rownames(spe))
+
+rowSubset (spe)<- c("Vimentin",  "CD20",            
+"Collagen III", "IFN gamma"
+,"CD83","CD8","Podoplanin","CD16", "CD21"                   
+, "Langerin", "CD68","CD45" , "CD31", "CXCR3", "CD56","CCR7", "CD14", "FXIIIA"                
+, "CCR6", "CD11b", "CD45RO", "Perilipin1", "CD11c",                
+"Ki67","Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
+"HLA_DR","CD303", "CXCR5")  
+
+rowSubset(spe)
+
+
+#saveRDS (spe, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250521_final_cluster_fixed_adipo_RO_cleaned for spatial.rds")
+
+
+#for our spatial analysis, we are no longer interested in T0h images so remove them
+spe<-spe[,spe$treatment!="T0h"]
+```
+###base cell types
+
+
+
+
+```{r}
+#first calculate some percentages of cell types of all cell types here. filter later and show any changes between conditions. do the subcapsular macs disappear?
+#make some conditions to decide functional status
+CD83pos<-assay(spe,"data")["CD83",]>0.12 
+
+IFNgpos<-assay(spe,"data")["IFN gamma",]>0.1
+Ki67pos<-assay(spe,"data")["Ki67",]>0.1
+CXCR3pos<-assay(spe,"data")["CXCR3",]>0.09#check this threshold in mantis to decide
+
+#sum(is.na(spe$total.estimated.spots))
+# spe$total.estimated.spots[is.na(spe$total.estimated.spots)]<-0
+#sum(is.na(spe$total.estimated.spots))
+
+
+# CCR6pos<-assay(spe,"data")["CCR6",]>0.05
+# CCR7pos<-assay(spe,"data")["CCR7",]>0.07
+```
+
+
+
+```{r}
+
+##lets do spicy on base cell types before fixing to IFNg+
+spe_base<-spe
+
+library(spicyR)
+
+spatialCoordsNames(spe)<-c("X" ,"Y")
+spe_base$x<-(as.data.frame(spatialCoords(spe))$X)#need to have the spatial data in col for below
+spe_base$y<-(as.data.frame(spatialCoords(spe))$Y)
+spatialCoordsNames(spe_base) <- c("x", "y")
+spe_base$CellID<-(as.data.frame(spe$CellID))
+spe_base$cells<-spe$uID# wants the spatial data to be "x" and "y" for the below to work
+spe_base$imageID<-spe$ImageID
+
+##need to have the treatment as factor, with base comparison listed first
+
+spe_base$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+
+
+mixed_effect_model_50_onemoretime<-spicy(spe_base, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster",
+              spatialCoords = c("x", "y"),
+              weights=T,
+               sigma = 20,
+              r= 50)
+
+signifPlot(mixed_effect_model_50_onemoretime,
+            breaks = c(-0.5,0.5,0.5),
+           cutoff = 0.01)
+
+
+saveRDS(mixed_effect_model_50_onemoretime, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/base_spicy_50_AS01_20250808_1.rds")
+
+
+ggsave("20250813_spicy_50_AS01_2_base.tif", dpi= "retina", height = 9.5, width = 13 )
+
+
+spe_base$treatment_factor <- factor(spe$treatment, levels = c("R848", "AS01", "mock"))
+
+
+mixed_effect_model_50_onemoretime_R848<-spicy(spe_base, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster",
+              spatialCoords = c("x", "y"),
+              weights=T,
+               sigma = 20,
+              r= 50)
+
+signifPlot(mixed_effect_model_50_onemoretime_R848,
+            breaks = c(-0.5,0.5,0.5))
+
+?signifPlot
+
+saveRDS(mixed_effect_model_50_onemoretime_R848, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/base_spicy_50_R848_20250808_1.rds")
+
+ggsave("20250808_spicy_50_R848_2_base.tif", dpi= "retina", height = 9.5, width = 13 )
+```
+
+```{r}
+##need to have the names as camel case otherwise Kontextual won't work
+
+spe <- spe |>
+  mutate(final_cluster= case_when(
+    
+    
+    final_cluster == "NK/Innate Lymphocytes" & IFNgpos ~ "IFNgPosNKInnateLymphocytes",
+    final_cluster == "NK/Innate Lymphocytes" & !IFNgpos ~ "IFNgNegNKInnateLymphocytes",
+    final_cluster == "Follicular B cell"~ "FollicularBcell",
+    final_cluster == "Extrafollicular B cell"~ "ExtrafollicularBcell",
+    final_cluster == "pDC"~ "pDC",
+    final_cluster == "Langerin+ cDC2"~ "LangerincDC2",
+    final_cluster == "cDC2"~ "cDC2",
+    final_cluster == "CD169- macs"~ "CD169NegMacs",
+    final_cluster == "cDC1" ~ "cDC1",
+    final_cluster == "CD169+ macs" ~ "CD169PosMacs",
+    final_cluster == "Mono/mac" ~ "MonoMac",
+    final_cluster == "Memory CD8+ T cell" & IFNgpos ~ "IFNgPosMemoryCD8Tcell",
+    final_cluster == "Memory CD8+ T cell" & !IFNgpos ~ "IFNgNegMemoryCD8Tcell",
+    final_cluster == "Naive CD8+ T cell" & IFNgpos ~"IFNgPosNaiveCD8Tcell",
+    final_cluster == "Naive CD8+ T cell" & !IFNgpos ~"IFNgNegNaiveCD8Tcell",
+    final_cluster == "Memory CD4+ T cell"& IFNgpos~ "IFNgposMemoryCD4Tcell",
+    final_cluster == "Memory CD4+ T cell"& !IFNgpos~ "IFNgNegMemoryCD4Tcell",
+    final_cluster == "Naive CD4+ T cell" & IFNgpos~ "IFNgPosNaiveCD4Tcell",
+    final_cluster == "Naive CD4+ T cell" & !IFNgpos~ "IFNgNegNaiveCD4Tcell",
+    final_cluster == "Fibroblast" ~ "Fibroblast",
+    final_cluster == "FRC"~ "FRC",
+    final_cluster == "Adipocyte" ~ "Adipocyte",
+    final_cluster == "LEC" ~ "LEC",
+    final_cluster == "BEC"~ "BEC",
+    final_cluster == "FDC"~ "FDC"
+
+  ))
+
+
+
+
+
+
+unique(spe$final_cluster)
+
+biologicalHierarchy=list(
+  CD169PosMacs="CD169PosMacs",
+  CD169NegMacs ="CD169NegMacs",
+  MonoMac =   "MonoMac",
+  pDC = "pDC",
+  cDC1 ="cDC1",
+  cDC2 = "cDC2" , 
+  LangerincDC2 = "LangerincDC2" , 
+  Stromal=c ("FRC", "Fibroblast" , "BEC" ,    "FDC" ,   "Adipocyte" , "LEC"),     
+  CD4_T_cell=c ("IFNgposMemoryCD4Tcell", "IFNgNegMemoryCD4Tcell", "IFNgPosNaiveCD4Tcell", "IFNgNegNaiveCD4Tcell") ,
+  CD8_T_cell=c("IFNgPosMemoryCD8Tcell", "IFNgNegMemoryCD8Tcell", "IFNgPosNaiveCD8Tcell", "IFNgNegNaiveCD8Tcell"),
+  B_cell= c("ExtrafollicularBcell", "FollicularBcell")
+)
+
+
+# here add some more categories
+biologicalHierarchy$potential_IFNg_producing_lymphocytes =c (biologicalHierarchy$CD4_T_cell,biologicalHierarchy$CD8_T_cell,
+                                "IFNgPosNKInnateLymphocytes", "IFNgNegNKInnateLymphocytes")
+
+#have the APCs on their own and also in broader context
+biologicalHierarchy$APC =c (biologicalHierarchy$CD169PosMacs,biologicalHierarchy$CD169NegMacs,
+                                biologicalHierarchy$pDC, biologicalHierarchy$cDC1, biologicalHierarchy$cDC2,
+                             biologicalHierarchy$LangerincDC2, biologicalHierarchy$MonoMac )
+
+
+
+
+all<-unique(spe$final_cluster)
+
+```
+
+```{r}
+
+##export to Qupath to make figures
+unique(spe$Image)
+spe$"Object ID"<-spe$Object.ID
+spe$`Object ID`
+spe$Class<-spe$final_cluster
+
+#spe1<-spe[,spe$Image=="penguinoutput_2025010920241108 p10 b1 LN179 T0h 17 IFNgc_s0_a1_ac_full.tiff"]
+
+data= as.data.frame(colData(spe))
+
+write.csv(data, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_final_cluster_fixed_adipo_RO_QP_IFNg.csv", row.names=F)
+
+
+
+
+```
+
+
+```{r}
+#make a test figure, check updated naming is working
+
+#fix spe first
+
+
+spatialCoordsNames(spe)<-c("X" ,"Y")
+spe$x<-(as.data.frame(spatialCoords(spe))$X)#need to have the spatial data in col for below
+spe$y<-(as.data.frame(spatialCoords(spe))$Y)
+spatialCoordsNames(spe) <- c("x", "y")
+spe$CellID<-(as.data.frame(spe$CellID))
+spe$cells<-spe$uID# wants the spatial data to be "x" and "y" for the below to work
+
+unique(spe$cellTypeNew)
+#make graph as example of distribution of cells
+
+spe|>
+  colData()|>
+  as.data.frame()|>
+  filter(ImageID== "17")|>
+  filter(final_cluster%in%c ("pDC", "IFNgPosNaiveCD4Tcell", "IFNgPosNKInnateLymphocytes") )|>
+  arrange(final_cluster)|>
+    ggplot(aes(x = x, y = y, color = final_cluster)) +
+  geom_point(size = 1) +
+  theme_classic()+
+  scale_colour_manual(values = c("pDC" = "#DCE319FF", "IFNgPosNaiveCD4Tcell"= "#481567FF",   "IFNgPosNKInnateLymphocytes" = "#2D708Eff" )) +
+  guides(colour = guide_legend(title = "Cell types", override.aes = list(size = 3)))
+
+
+
+# sum(spe$cellTypeNew == "CD83_cDC2")
+
+parentDf <- parentCombinations(
+  all = all, parentList= biologicalHierarchy
+)
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250628_parent_DF")
+```
+
+```{r}
+#kontextual for all cell pairs r=50
+speKontextual_50 <- Kontextual(
+  cells = spe,
+  parentDf = parentDf,
+  r = 50,
+  imageID = "ImageID",
+  cellType="final_cluster",
+  spatialCoords = c("x", "y"),
+  inhom = T
+  
+  
+)
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF50_20250627_1.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+saveRDS(speKontextual_50, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250627_1.rds")
+# speKontextual_50<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250619.rds")
+
+kontextMat_50 <- prepMatrix(speKontextual_50)
+
+mixed_effect_model_50<-spicy(spe, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster",
+              spatialCoords = c("x", "y"),
+              weights=T,
+              alternateResult = kontextMat_50)
+
+saveRDS(mixed_effect_model_50, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/mixed_effect_20250627_1.rds")
+
+signifPlot(mixed_effect_model_50,
+            breaks = c(-7,7,1))
+?signifPlot
+# contextLabels = list("CD169+ Macrophage", "CD169- Macrophage", "Monocyte/Macrophage",  "pDC",  "cDC1",   "cDC2" , "Langerin+ cDC2",
+#                      
+#                     "Stromal", "CD4 T cell", "CD8 T cell", "B cell", "Potential IFNgamma producing lymphocytes", "APC")
+# 
+# 
+# 
+# signifPlot(mixed_effect_model_50,
+#             breaks = c(-7,7,1), contextLabels = contextLabels)
+# 
+ggsave("20250627_significance plot by context_AS01_50_6.png", dpi= "print", height = 9.5, width = 15 )
+
+
+
+
+#################
+#r=100
+
+speKontextual_100 <- Kontextual(
+  cells = spe,
+  parentDf = parentDf,
+  r = 100,
+  imageID = "ImageID",
+  cellType="final_cluster",
+  spatialCoords = c("x", "y"),
+  inhom = T
+  
+  
+)
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF50_20250627_2.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+saveRDS(speKontextual_100, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_100_20250627_1.rds")
+# speKontextual_50<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250619.rds")
+
+kontextMat_100 <- prepMatrix(speKontextual_100)
+
+mixed_effect_model_100<-spicy(spe, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster",
+              spatialCoords = c("x", "y"),
+              weights=T,
+              alternateResult = kontextMat_100)
+
+saveRDS(mixed_effect_model_100, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/mixed_effect_20250627_1.rds")
+
+signifPlot(mixed_effect_model_100,
+            breaks = c(-9,9,1))
+?signifPlot
+# contextLabels = list("CD169+ Macrophage", "CD169- Macrophage", "Monocyte/Macrophage",  "pDC",  "cDC1",   "cDC2" , "Langerin+ cDC2",
+#                      
+#                     "Stromal", "CD4 T cell", "CD8 T cell", "B cell", "Potential IFNgamma producing lymphocytes", "APC")
+# 
+# 
+# 
+# signifPlot(mixed_effect_model_50,
+#             breaks = c(-7,7,1), contextLabels = contextLabels)
+# 
+ggsave("20250627_significance plot by context_AS01_100_7.png", dpi= "retina", height = 9.5, width = 15 )
+
+       
+# p2<-dittoBarPlot(spe,  var = "final_cluster", group.by = "treatment", data.out = T
+#                  )
+# 
+# p2[[2]]
+
+#OML it works!!!!!
+##Lets change this so I can get the CD83 in there too... too important a question not to try
+##and then if that works change the contexts a bit to split things into CD83+ vs CD83- and IFNg+ vs IFNg-
+```
+
+###testing changed hierarchy, only changing one thing at a time to make sure nothing breaks
+
+```{r}
+unique(spe$final_cluster)
+
+biologicalHierarchy=list(
+  CD169PosMacs="CD169PosMacs",
+  CD169NegMacs ="CD169NegMacs",
+  MonoMac =   "MonoMac",
+  pDC = "pDC",
+  cDC1 ="cDC1",
+  cDC2 = "cDC2" , 
+  LangerincDC2 = "LangerincDC2" , 
+  Stromal=c ("FRC", "Fibroblast" , "BEC" ,    "FDC" ,   "Adipocyte" , "LEC"),     
+  IFNgNegLymphocyte=c ( "IFNgNegMemoryCD8Tcell", "IFNgNegNaiveCD4Tcell", "IFNgNegNaiveCD8Tcell", "IFNgNegMemoryCD4Tcell", "IFNgNegNKInnateLymphocytes") ,
+  IFNgPosLymphocyte=c("IFNgPosMemoryCD8Tcell",  "IFNgPosNaiveCD4Tcell",  "IFNgPosNaiveCD8Tcell", "IFNgposMemoryCD4Tcell", "IFNgPosNKInnateLymphocytes"),
+  B_cell= c("ExtrafollicularBcell", "FollicularBcell")
+)
+
+
+# here add some more categories
+biologicalHierarchy$Lymphocytes =c (biologicalHierarchy$IFNgNegLymphocyte,biologicalHierarchy$IFNgPosLymphocyte)
+                                 
+
+#have the APCs on their own and also in broader context
+biologicalHierarchy$APC =c (biologicalHierarchy$CD169PosMacs,biologicalHierarchy$CD169NegMacs,
+                                biologicalHierarchy$pDC, biologicalHierarchy$cDC1, biologicalHierarchy$cDC2,
+                             biologicalHierarchy$LangerincDC2, biologicalHierarchy$MonoMac )
+
+
+
+
+all<-unique(spe$final_cluster)
+
+parentDf <- parentCombinations(
+  all = all, parentList= biologicalHierarchy
+)
+```
+
+```{r}
+
+speKontextual_50 <- Kontextual(
+  cells = spe,
+  parentDf = parentDf,
+  r = 50,
+  imageID = "ImageID",
+  cellType="final_cluster",
+  spatialCoords = c("x", "y"),
+  inhom = T
+  
+  
+)
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF50_20250628_1.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+saveRDS(speKontextual_50, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250628_1.rds")
+# speKontextual_50<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250619.rds")
+
+kontextMat_50 <- prepMatrix(speKontextual_50)
+
+mixed_effect_model_50<-spicy(spe, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster",
+              spatialCoords = c("x", "y"),
+              weights=T,
+              alternateResult = kontextMat_50)
+
+saveRDS(mixed_effect_model_50, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/mixed_effect_20250628_1_50.rds")
+
+signifPlot(mixed_effect_model_50,
+            breaks = c(-7,7,1))
+?signifPlot
+# contextLabels = list("CD169+ Macrophage", "CD169- Macrophage", "Monocyte/Macrophage",  "pDC",  "cDC1",   "cDC2" , "Langerin+ cDC2",
+#                      
+#                     "Stromal", "CD4 T cell", "CD8 T cell", "B cell", "Potential IFNgamma producing lymphocytes", "APC")
+# 
+# 
+# 
+# signifPlot(mixed_effect_model_50,
+#             breaks = c(-7,7,1), contextLabels = contextLabels)
+# 
+ggsave("20250628_significance plot by context_AS01_50_6.png", dpi= "print", height = 9.5, width = 15 )
+
+
+
+
+#################
+
+speKontextual_100 <- Kontextual(
+  cells = spe,
+  parentDf = parentDf,
+  r = 100,
+  imageID = "ImageID",
+  cellType="final_cluster",
+  spatialCoords = c("x", "y"),
+  inhom = T
+  
+  
+)
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF50_20250628_2.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+saveRDS(speKontextual_100, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_100_20250628_1.rds")
+# speKontextual_50<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250619.rds")
+
+kontextMat_100 <- prepMatrix(speKontextual_100)
+
+mixed_effect_model_100<-spicy(spe, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster",
+              spatialCoords = c("x", "y"),
+              weights=T,
+              alternateResult = kontextMat_100)
+
+saveRDS(mixed_effect_model_100, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/mixed_effect_20250628_1_100.rds")
+
+signifPlot(mixed_effect_model_100,
+            breaks = c(-9,9,1))
+
+# contextLabels = list("CD169+ Macrophage", "CD169- Macrophage", "Monocyte/Macrophage",  "pDC",  "cDC1",   "cDC2" , "Langerin+ cDC2",
+#                      
+#                     "Stromal", "CD4 T cell", "CD8 T cell", "B cell", "Potential IFNgamma producing lymphocytes", "APC")
+# 
+# 
+# 
+# signifPlot(mixed_effect_model_50,
+#             breaks = c(-7,7,1), contextLabels = contextLabels)
+# 
+ggsave("20250628_significance plot by context_AS01_100_7.png", dpi= "retina", height = 9.5, width = 15 )
+
+
+
+##########yesss keep this one it works!!! now keep going until I get the hierarchy the way I want it, changing one thing at a time so I don't break the code
+```
+###changing one thing at a time again, this is the final heirarchy I want
+```{r}
+unique(spe$final_cluster)
+
+biologicalHierarchy=list(
+  APC=c("CD169PosMacs","CD169NegMacs","MonoMac","pDC","cDC1", "cDC2" ,  "LangerincDC2"),
+  Stromal=c ("FRC", "Fibroblast" , "BEC" ,    "FDC" ,   "Adipocyte" , "LEC"),     
+  IFNgNegLymphocyte=c ( "IFNgNegMemoryCD8Tcell", "IFNgNegNaiveCD4Tcell", "IFNgNegNaiveCD8Tcell", "IFNgNegMemoryCD4Tcell", "IFNgNegNKInnateLymphocytes") ,
+  IFNgPosLymphocyte=c("IFNgPosMemoryCD8Tcell",  "IFNgPosNaiveCD4Tcell",  "IFNgPosNaiveCD8Tcell", "IFNgposMemoryCD4Tcell", "IFNgPosNKInnateLymphocytes"),
+  B_cell= c("ExtrafollicularBcell", "FollicularBcell")
+)
+
+
+# here add some more categories
+biologicalHierarchy$Lymphocytes =c (biologicalHierarchy$IFNgNegLymphocyte,biologicalHierarchy$IFNgPosLymphocyte)
+
+
+
+
+
+
+all<-unique(spe$final_cluster)
+
+parentDf <- parentCombinations(
+  all = all, parentList= biologicalHierarchy
+)
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250701_parent_DF_3_CD83")
+
+spe$cellTypeNew<-spe$final_cluster
+
+spe$cellTypeNew[spe$final_cluster %in% biologicalHierarchy$APC] <- "APC"
+```
+
+```{r}
+##lets do some proportions checks first before I get started with the final hierarchy
+# how many IFng+ lymphocytes do I have, do the proportions of IFNg+ NKs change by treatment?
+#also check APC proportions, might be useful
+
+
+library(lme4)
+library(dplyr)
+library(emmeans)
+library(ggplot2)
+library(dplyr)
+library(stringr)
+library(tibble)
+library(spicyR)
+
+spe_sub<- spe[,spe$cellTypeNew == "APC" ]
+
+p1<-dittoBarPlot(spe_sub,  var = "final_cluster", group.by = "cellTypeNew", legend.show = T, legend.title = "Base cell type", xlab = "Cell types by activation status", ylab = "Percent" ,main = "A", split.by = "treatment", data.out = T, x.labels = "IFNgamma+ Lymphocytes")
+p1[[1]]
+ggsave("20250707_bar_plot_4-treatment.png", dpi= "retina", height = 8, width = 8 )
+percentages_barplot_df_2<-p2[[2]]  
+
+p2<-dittoBarPlot(spe_sub,  var = "final_cluster", group.by = "cellTypeNew", legend.show = T, legend.title = "Base cell type", xlab = "Cell types by activation status", ylab = "Percent" ,main = "A", split.by = "ImageID", data.out = T, x.labels = "IFNgamma+ Lymphocytes")
+p2[[1]]
+ggsave("20250707_bar_plot_3-DonorID.png", dpi= "retina", height = 8, width = 8 )
+percentages_barplot_df_2<-p2[[2]]  
+
+
+#use the below data frame to make sure the renaming of the treatment and donor ID is accurate at the mutate step
+df_check <- colData(spe) %>%
+  as.data.frame() %>%
+  group_by(DonorID, treatment, final_cluster, ImageID) %>%
+  summarise(counts = n(), .groups = "drop_last") %>%
+  mutate(total = sum(counts)) %>%
+  mutate(percent = 100 * counts / total)
+       
+       
+df_out_all <- percentages_barplot_df_2 |>
+  mutate(treatment = case_when(
+    ImageID == "1" ~ "AS01",
+    ImageID == "12" ~ "AS01",
+    ImageID == "13" ~ "AS01",
+    ImageID == "17" ~ "AS01",
+    ImageID == "18" ~ "AS01",
+    ImageID == "22" ~ "AS01",
+    ImageID == "25" ~ "AS01",
+    ImageID == "27" ~ "AS01",
+    ImageID == "28" ~ "AS01",
+    ImageID == "5" ~ "AS01",
+    ImageID == "6" ~ "AS01",
+    ImageID == "14" ~ "mock",
+    ImageID == "15" ~ "mock",
+    ImageID == "19" ~ "mock",
+    ImageID == "2" ~ "mock",
+    ImageID == "23" ~ "mock",
+    ImageID == "26" ~ "mock",
+    ImageID == "29" ~ "mock",
+    ImageID == "7" ~ "mock",
+    ImageID == "10" ~ "R848",
+    ImageID == "11" ~ "R848",
+    ImageID == "20" ~ "R848",
+    ImageID == "3" ~ "R848",
+    ImageID == "30" ~ "R848",
+    ImageID == "8" ~ "R848",
+  ))
+
+
+df_out_all <- df_out_all |>
+  mutate(DonorID = case_when(
+    ImageID == "1" ~ "LN146.1" ,
+    ImageID == "12"~ "LN163.1",
+    ImageID == "13" ~"LN163.1" ,
+    ImageID == "17"  ~"LN179",
+    ImageID == "18"  ~"LN179",
+    ImageID == "22"  ~"LN212",
+    ImageID == "25"  ~"LN223.2",
+    ImageID == "27"  ~"LN70",
+    ImageID == "28" ~"LN70" ,
+    ImageID == "5"  ~"LN158.1",
+    ImageID == "6"  ~"LN158.1",
+    ImageID == "14"  ~"LN163.1",
+    ImageID == "15"  ~"LN163.1",
+    ImageID == "19"  ~"LN179",
+    ImageID == "2"  ~"LN146.1",
+    ImageID == "23"  ~"LN212",
+    ImageID == "26" ~"LN223.2" ,
+    ImageID == "29"  ~"LN70",
+    ImageID == "7"  ~"LN158.1",
+    ImageID == "10"  ~"LN163.1",
+    ImageID == "11" ~ "LN163.1",
+    ImageID == "20" ~"LN179" ,
+    ImageID == "3" ~ "LN146.1" ,
+    ImageID == "30" ~ "LN70",
+    ImageID == "8"  ~"LN158.1",
+    
+    
+
+  ))
+
+#dump into mixed effect model so I know what is significantly different
+
+df_out_all_grouped <- df_out_all %>%
+  as.data.frame() %>%
+  group_by(DonorID, treatment, label)
+
+
+cell_types <- unique(df_out_all_grouped$label)
+lrt_results <- data.frame()
+all_contrasts<- data.frame()
+
+for (ct in cell_types) {
+  data_ct <- df_out_all_grouped %>% filter(label == ct)
+  
+  # Fit full and reduced models
+  full_model <- lmer(percent ~ treatment+(1 | DonorID),
+                      data = data_ct)
+  reduced_model <- update(full_model, . ~ . - treatment)
+  
+  # Likelihood ratio test
+  lrt <- anova(reduced_model, full_model)
+  p_val <- lrt$`Pr(>Chisq)`[2]
+  
+  lrt_results <- rbind(lrt_results, data.frame(label = ct, p_value = p_val))
+  
+    emmeans_results <- emmeans(full_model, pairwise ~ treatment, adjust = "tukey")
+  contrasts_df <- as.data.frame(emmeans_results$contrasts) 
+  contrasts_df$cell_type <- ct
+  all_contrasts <- rbind(all_contrasts, contrasts_df)
+
+  
+
+}
+
+plot_data <- df_out_all_grouped  %>%
+  group_by(label, treatment, DonorID, percent)%>%
+  left_join(lrt_results, by = "label")
+
+pval_labels <- lrt_results %>%
+  mutate(label = paste0("p = ", signif(p_value, 3)))
+
+pval_labels_posthoc <- all_contrasts %>%
+  mutate(label = signif(p.value, digits=3))
+
+pval_to_stars <- function(p) {
+  if (p < 0.001) return("***")
+  else if (p < 0.01) return("**")
+  else if (p < 0.05) return("*")
+  else return("ns")
+}
+
+pval_labels <- lrt_results %>%
+  mutate(label = sapply(p_value, pval_to_stars))
+
+pval_labels_posthoc <- all_contrasts %>%
+  mutate(label = sapply(p.value, pval_to_stars))
+
+plot_data$cell_type<-plot_data$label
+
+# saveRDS(plot_data,"D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250707_plot_data_percentages_IFNg.rds")
+
+plot_data<- readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250707_plot_data_percentages_IFNg.rds")
+
+plot_data$treatment<- factor(plot_data$treatment, levels = c("mock", "AS01", "R848"))
+
+ggplot(plot_data, aes(x = treatment, y = percent, fill = treatment)) +
+  geom_boxplot(position = 'dodge') +
+  facet_wrap(~ cell_type, scales = "free_y") +
+  geom_text(data = pval_labels, aes(x = 2, y = Inf, label = label),
+            inherit.aes = FALSE, vjust = 0.8) +
+  labs(title = "Percent Cell Types by Treatment Group",
+       x = "Treatment", y = "Percentage") +
+  theme_classic()
+
+
+ggsave("20250711 comparing box plot IFNg cell.png", dpi= "retina", height = 12, width = 12 )
+
+##Maybe use this figure, see if it fits!
+
+#also lets do some distance measurements!
+#I want a ridge plot of the CD8 cells
+
+# unique(spe$final_cluster)
+# 
+# spe_ridge <- spe |>
+#   mutate(final_cluster= case_when(
+# 
+# 
+#     final_cluster == "IFNgPosNKInnateLymphocytes" ~ "IFN gamma+ NK/Innate Lymphocytes",
+#     final_cluster == "IFNgNegNKInnateLymphocytes" ~ "IFN gamma- NK/Innate Lymphocytes",
+#     final_cluster == "FollicularBcell"~ "Follicular B cell",
+#     final_cluster == "ExtrafollicularBcell"~ "Extrafollicular B cell",
+#     final_cluster == "pDC"~ "pDC",
+#     final_cluster == "LangerincDC2"~ "Langerin+ cDC2",
+#     final_cluster == "cDC2"~ "cDC2",
+#     final_cluster == "CD169NegMacs"~ "CD169- Macs",
+#     final_cluster == "cDC1" ~ "cDC1",
+#     final_cluster == "CD169PosMacs" ~ "CD169+ Macs",
+#     final_cluster == "MonoMac" ~ "Mono/Mac",
+#     final_cluster == "IFNgPosMemoryCD8Tcell" ~ "IFN gamma+ Memory CD8 T cell",
+#     final_cluster == "IFNgNegMemoryCD8Tcell" ~ "IFN gamma- Memory CD8 T cell",
+#     final_cluster == "IFNgPosNaiveCD8Tcell" ~"IFN gamma+ Naive CD8 T cell",
+#     final_cluster == "IFNgNegNaiveCD8Tcell" ~"IFN gamma- Naive CD8 T cell",
+#     final_cluster == "IFNgposMemoryCD4Tcell"~ "IFN gamma+ Memory CD4 T cell",
+#     final_cluster == "IFNgNegMemoryCD4Tcell"~ "IFN gamma- Memory CD4 T cell",
+#     final_cluster == "IFNgPosNaiveCD4Tcell"~ "IFN gamma+ Naive CD4 T cell",
+#     final_cluster == "IFNgNegNaiveCD4Tcell"~ "IFN gamma- Naive CD4 T cell",
+#     final_cluster == "Fibroblast" ~ "Fibroblast",
+#     final_cluster == "FRC"~ "FRC",
+#     final_cluster == "Adipocyte" ~ "Adipocyte",
+#     final_cluster == "LEC" ~ "LEC",
+#     final_cluster == "BEC"~ "BEC",
+#     final_cluster == "FDC"~ "FDC"
+# 
+#   ))
+# 
+# spe_ridge$final_cluster_2<-  factor(spe_ridge$final_cluster, levels=c("Adipocyte", "BEC", "FDC","Fibroblast", "FRC", "LEC", "CD169+ Macs", "CD169- Macs", "Mono/Mac", "Extrafollicular B cell", "Follicular B cell", "IFN gamma+ Memory CD8 T cell", "IFN gamma- Memory CD8 T cell", "IFN gamma+ Naive CD8 T cell", "IFN gamma- Naive CD8 T cell", "IFN gamma- Memory CD4 T cell", "IFN gamma+ Naive CD4 T cell", "IFN gamma- Naive CD4 T cell", "IFN gamma+ NK/Innate Lymphocytes", "IFN gamma- NK/Innate Lymphocytes", "Langerin+ cDC2", "cDC1", "cDC2", "pDC"))
+# 
+ spe_ridge$treatment_factor<- factor(spe_ridge$treatment, levels=c("mock", "AS01", "R848"))
+spe$final_cluster_factor<- factor(spe$final_cluster, levels= c(  "Adipocyte", "FRC" , "IFNgNegMemoryCD4Tcell","CD169NegMacs", "IFNgNegNaiveCD4Tcell","IFNgNegMemoryCD8Tcell" , "BEC" ,"IFNgNegNaiveCD8Tcell", "pDC" ,                     "IFNgNegNKInnateLymphocytes", "LangerincDC2" , "LEC", "cDC2" ,"IFNgPosMemoryCD8Tcell" ,"cDC1",                    "IFNgposMemoryCD4Tcell" ,   "Fibroblast" , "IFNgPosNaiveCD4Tcell" ,"IFNgPosNaiveCD8Tcell" , "CD169PosMacs",
+"ExtrafollicularBcell", "MonoMac" , "IFNgPosNKInnateLymphocytes", "FollicularBcell","FDC"
+# 
+#   ))
+# 
+# spe$final_cluster_factor_2<- factor(spe$final_cluster, levels= c( "IFNgNegMemoryCD4Tcell", "IFNgNegNaiveCD4Tcell","IFNgNegMemoryCD8Tcell" , "IFNgNegNaiveCD8Tcell", "IFNgNegNKInnateLymphocytes"  ,"IFNgPosMemoryCD8Tcell" ,                    "IFNgposMemoryCD4Tcell" ,    "IFNgPosNaiveCD4Tcell" ,"IFNgPosNaiveCD8Tcell" ,         
+#  "IFNgPosNKInnateLymphocytes"
+# 
+#   ))
+
+library(ggridges ,lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+
+# for_plot<-drop_na (as.data.frame(colData(spe)))
+# 
+# 
+# 
+# 
+# ggplot(as.data.frame(colData(spe_ridge))) + 
+#     geom_density_ridges(aes(Signed.distance.to.annotation.with.Capsule.µm, final_cluster_2, fill = treatment_factor, alpha = 0.3)) +
+#     geom_vline(xintercept = 0, color = "dark red", linewidth = 2)+
+#   theme_classic()
+# 
+# 
+# ggsave("20250825_distances_ridgeplot_IFNg.tif", dpi= "retina", height = 6, width = 8 )
+
+##lets also make one with just NK and the CD8s
+
+ spe$treatment_factor<- factor(spe_ridge$treatment, levels=c("mock", "AS01", "R848"))
+spe$final_cluster_factor<- factor(spe$final_cluster, levels= c(  "IFNgposMemoryCD4Tcell" , "IFNgNegMemoryCD4Tcell", "IFNgPosNaiveCD8Tcell" ,"IFNgNegNaiveCD4Tcell","IFNgPosMemoryCD8Tcell" ,"IFNgNegMemoryCD8Tcell" , "IFNgPosNaiveCD4Tcell" ,"IFNgNegNaiveCD8Tcell",  "IFNgPosNKInnateLymphocytes", "IFNgNegNKInnateLymphocytes"))
+
+
+
+spe_forplot_IFNg<- spe[,spe$final_cluster == "IFNgNegMemoryCD8Tcell" | spe$final_cluster== "IFNgPosMemoryCD8Tcell" | spe$final_cluster == "IFNgNegNKInnateLymphocytes" | spe$final_cluster ==    "IFNgPosNKInnateLymphocytes" ]
+
+ggplot(as.data.frame(colData(spe_forplot_IFNg))) + 
+    geom_density_ridges(na.rm = T, aes(Signed.distance.to.annotation.with.Capsule.µm, final_cluster_factor, fill = treatment_factor, alpha = 0.3)) +
+    geom_vline(xintercept = 0, color = "dark red", linewidth = 2)+ theme_ridges(grid = F, center_axis_labels = T)+
+  labs(, x = expression("Signed Distance to Capsule "~mu), y = "Cell Type", element_text(size=24))
+
+
+ggsave("20250825_distances_ridgeplot_IFNg_just NK CD8.tif", dpi= "retina", height = 6, width = 8 )
+
+##now lets test for statistical significance, are cells within 100um (%) different by treatment?
+
+
+spe_forplot_IFNg$capsule_near_far <- ifelse(spe_forplot_IFNg$Signed.distance.to.annotation.with.Capsule.µm >0 & spe_forplot_IFNg$Signed.distance.to.annotation.with.Capsule.µm <=150,
+  "near", "far"
+)
+
+spe_forplot_IFNg$capsule_near_far<- as.character(spe_forplot_IFNg$capsule_near_far)
+
+df <- colData(spe_forplot_IFNg) %>%
+  as.data.frame() %>%
+  group_by(DonorID, treatment, treatment_factor, final_cluster, capsule_near_far) %>%
+  summarise(counts = n(), .groups = "drop_last") %>%
+  mutate(total = sum(counts)) %>%
+  mutate(percent = 100 * counts / total)%>%
+  filter(treatment!= "T0h")
+
+
+
+
+ df_c<- df[complete.cases(df),]
+ 
+ df_c_2<- df_c%>%
+  filter(capsule_near_far!= "far")
+ 
+ cell_types <- unique(df_c_2$final_cluster)
+lrt_results <- data.frame()
+all_contrasts<- data.frame()
+
+for (ct in cell_types) {
+  data_ct <- df_c_2 %>% filter(final_cluster == ct)
+  
+  # Fit full and reduced models
+  full_model <- lmer(percent ~ treatment + (1 | DonorID),
+                      data = data_ct)
+  reduced_model <- update(full_model, . ~ . - treatment)
+  
+  # Likelihood ratio test
+  lrt <- anova(reduced_model, full_model)
+  p_val <- lrt$`Pr(>Chisq)`[2]
+  
+  lrt_results <- rbind(lrt_results, data.frame(final_cluster = ct, p_value = p_val))
+  
+  emmeans_results <- emmeans(full_model, pairwise ~ treatment, adjust = "tukey")
+  contrasts_df <- as.data.frame(emmeans_results$contrasts) 
+  contrasts_df$cell_type <- ct
+  all_contrasts <- rbind(all_contrasts, contrasts_df)
+
+}
+
+
+lrt_results %>%
+filter(p_value < 0.05)
+
+##no statistical sig. here
+
+```
+
+
+
+```{r}
+#okay now is the time to make the plots and do Kontextual on the final heirarchy
+
+unique (spe$cellTypeNew)
+#fix spe
+
+
+spatialCoordsNames(spe)<-c("X" ,"Y")
+spe$x<-(as.data.frame(spatialCoords(spe))$X)#need to have the spatial data in col for below
+spe$y<-(as.data.frame(spatialCoords(spe))$Y)
+spatialCoordsNames(spe) <- c("x", "y")
+spe$CellID<-(as.data.frame(spe$CellID))
+spe$cells<-spe$uID# wants the spatial data to be "x" and "y" for the below to work
+
+unique(spe$cellTypeNew)
+#make graph as example of distribution of cells
+
+spe|>
+  colData()|>
+  as.data.frame()|>
+  filter(ImageID== "17")|>
+  filter(final_cluster%in%c ("pDC", "IFNgPosNaiveCD4Tcell", "IFNgPosNKInnateLymphocytes") )|>
+  arrange(final_cluster)|>
+    ggplot(aes(x = x, y = y, color = final_cluster)) +
+  geom_point(size = 1) +
+  theme_classic()+
+  scale_colour_manual(values = c("pDC" = "#DCE319FF", "IFNgPosNaiveCD4Tcell"= "#481567FF",   "IFNgPosNKInnateLymphocytes" = "#2D708Eff" )) +
+  guides(colour = guide_legend(title = "Cell types", override.aes = list(size = 3)))
+
+
+
+# sum(spe$cellTypeNew == "CD83_cDC2")
+
+parentDf <- parentCombinations(
+  all = all, parentList= biologicalHierarchy
+)
+# 
+# saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250628_parent_DF")
+```
+```{r}
+speKontextual_50 <- Kontextual(
+  cells = spe,
+  parentDf = parentDf,
+  r = 50,
+  imageID = "ImageID",
+  cellType="final_cluster",
+  spatialCoords = c("x", "y"),
+  inhom = T
+  
+  
+)
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF50_20250701_1.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+saveRDS(speKontextual_50, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250701_1.rds")
+speKontextual_50<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250701_1.rds")
+
+kontextMat_50 <- prepMatrix(speKontextual_50)
+
+mixed_effect_model_50<-spicy(spe, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster",
+              spatialCoords = c("x", "y"),
+              weights=T,
+              alternateResult = kontextMat_50)
+
+saveRDS(mixed_effect_model_50, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/mixed_effect_20250701_1_50.rds")
+mixed_effect_model_50<- readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/mixed_effect_20250701_1_50.rds")
+
+signifPlot(mixed_effect_model_50,
+            breaks = c(-12,12,4))
+
+?signifPlot
+
+# contextLabels = list("CD169+ Macrophage", "CD169- Macrophage", "Monocyte/Macrophage",  "pDC",  "cDC1",   "cDC2" , "Langerin+ cDC2",
+#                      
+#                     "Stromal", "CD4 T cell", "CD8 T cell", "B cell", "Potential IFNgamma producing lymphocytes", "APC")
+# 
+# 
+# 
+# signifPlot(mixed_effect_model_50,
+#             breaks = c(-7,7,1), contextLabels = contextLabels)
+# 
+ggsave("20250806_significance plot by context_AS01_50_6.tif", dpi= "retina", height = 9.5, width = 13 )
+
+##now between R848 and mock, and R848 and AS01
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "R848", "AS01"))
+spe$imageID<-spe$ImageID
+
+mixed_effect_model_50_R848<-spicy(spe, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster",
+              spatialCoords = c("x", "y"),
+              weights=T,
+              alternateResult = kontextMat_50)
+
+saveRDS(mixed_effect_model_50_R848, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/mixed_effect_20250806_1_50_R848.rds")
+
+signifPlot(mixed_effect_model_50_R848,
+            breaks = c(-12,12,4))
+
+ggsave("20250806_significance plot by context_R848_50_6.tif", dpi= "retina", height = 9.5, width = 13 )
+
+
+
+##
+spe$treatment_factor <- factor(spe$treatment, levels = c("R848", "AS01", "mock"))
+spe$imageID<-spe$ImageID
+
+mixed_effect_model_50_RA<-spicy(spe, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster",
+              spatialCoords = c("x", "y"),
+              weights=T,
+              alternateResult = kontextMat_50)
+
+saveRDS(mixed_effect_model_50_RA, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/mixed_effect_20250806_1_50_RA.rds")
+
+signifPlot(mixed_effect_model_50_RA,
+            breaks = c(-12,12,4))
+
+ggsave("20250806_significance plot by context_RA_50_6.tif", dpi= "retina", height = 9.5, width = 13 )
+
+#################
+
+speKontextual_100 <- Kontextual(
+  cells = spe,
+  parentDf = parentDf,
+  r = 100,
+  imageID = "ImageID",
+  cellType="final_cluster",
+  spatialCoords = c("x", "y"),
+  inhom = T
+  
+  
+)
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF50_20250701_2.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+saveRDS(speKontextual_100, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_100_20250701_1.rds")
+speKontextual_100<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_100_20250701_1.rds")
+
+kontextMat_100 <- prepMatrix(speKontextual_100)
+
+mixed_effect_model_100<-spicy(spe, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster",
+              spatialCoords = c("x", "y"),
+              weights=T,
+              alternateResult = kontextMat_100)
+
+saveRDS(mixed_effect_model_100, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/mixed_effect_20250701_1_100.rds")
+
+signifPlot(mixed_effect_model_100,
+            breaks = c(-9,9,1))
+
+mixed_effect_model_100$p.value%>%
+  as.data.frame()
+
+?Kontextual
+?kontextCurve
+
+# metric = bind(mixed_effect_model_100) |> as.data.frame()
+# ggplot(metric, aes(y = IFNgPosMemoryCD8Tcell__pDC__APC, x = condition)) +
+#   geom_boxplot()
+
+
+
+# contextLabels = list("CD169+ Macrophage", "CD169- Macrophage", "Monocyte/Macrophage",  "pDC",  "cDC1",   "cDC2" , "Langerin+ cDC2",
+#                      
+#                     "Stromal", "CD4 T cell", "CD8 T cell", "B cell", "Potential IFNgamma producing lymphocytes", "APC")
+# 
+# 
+# 
+# signifPlot(mixed_effect_model_50,
+#             breaks = c(-7,7,1), contextLabels = contextLabels)
+# # 
+# ggsave("20250701_significance plot by context_AS01_100_7.png", dpi= "retina", height = 9.5, width = 15 )
+# 
+# mixed_effect_model_100_2<-spicy(spe, 
+#               condition = "treatment_factor",
+#               covariates = "treatment_factor",
+#               subject = "DonorID",
+#               imageID = "imageID",
+#               cellType = "final_cluster",
+#               spatialCoords = c("x", "y"),
+#               weights=F,
+#               alternateResult = kontextMat_100)
+# 
+# saveRDS(mixed_effect_model_100_2, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/mixed_effect_20250701_1_100_2.rds")
+# 
+# signifPlot(mixed_effect_model_100_2,
+#             breaks = c(-9,9,1))
+# 
+# 
+# mixed_effect_model_100_2$p.value%>%
+#   as.data.frame()
+# ?signifPlot
+# contextLabels = list("CD169+ Macrophage", "CD169- Macrophage", "Monocyte/Macrophage",  "pDC",  "cDC1",   "cDC2" , "Langerin+ cDC2",
+#                      
+#                     "Stromal", "CD4 T cell", "CD8 T cell", "B cell", "Potential IFNgamma producing lymphocytes", "APC")
+# 
+# 
+# 
+# signifPlot(mixed_effect_model_50,
+#             breaks = c(-7,7,1), contextLabels = contextLabels)
+# 
+ggsave("20250701_significance plot by context_AS01_100_7.png", dpi= "retina", height = 9.5, width = 15 )
+
+
+
+##now lets see if anything interesting comes up here, putting the results through the mixed effects model to see what pops up
+
+library(lme4)
+library(emmeans)
+
+cell_types <- unique(kontextMat_100)
+lrt_results <- data.frame()
+all_contrasts<- data.frame()
+
+for (ct in colnames(kontextMat_100)) {
+  data_ct <-data.frame(percent= kontextMat_100[,ct],ImageID =as.numeric(rownames(kontextMat_100)))
+  data_ct<-left_join(data_ct, unique(as.data.frame(colData(spe) [,c("DonorID", "treatment", "ImageID")])))
+  
+  # Fit full and reduced models
+  full_model <- lmer(percent ~ treatment+(1 | DonorID),
+                      data = data_ct)
+  reduced_model <- update(full_model, . ~ . - treatment)
+  
+  # Likelihood ratio test
+  lrt <- anova(reduced_model, full_model)
+  p_val <- lrt$`Pr(>Chisq)`[2]
+  
+  lrt_results <- rbind(lrt_results, data.frame(label = ct, p_value = p_val))
+  
+  emmeans_results <- emmeans(full_model, pairwise ~ treatment, adjust = "tukey")
+  contrasts_df <- as.data.frame(emmeans_results$contrasts) 
+  contrasts_df$cell_type <- ct
+  all_contrasts <- rbind(all_contrasts, contrasts_df)
+}
+
+
+lrt_results%>%
+  filter(p_value<0.05)
+
+
+all_contrasts%>%
+  filter(p.value<0.05)
+
+
+saveRDS(lrt_results, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_lrt_results_Kontextual_100_2.rds")
+Kontextual_lrt<-readRDS ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_lrt_results_Kontextual_100_2.rds")
+saveRDS (all_contrasts, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_all_contrasts_Kontextual_100_2.rds")
+Kontextual_all_contrasts<- readRDS ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_all_contrasts_Kontextual_100_2.rds")
+
+
+  
+
+head(filter)
+
+##box plot test##
+
+pVal_Kontextual_100<-speKontextual_100
+pVal_Kontextual_100$label<-speKontextual_100$test
+
+
+pVal_Kontextual_100<-left_join(pVal_Kontextual_100, Kontextual_lrt, join_by("label"))
+
+saveRDS(pVal_Kontextual_100, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_pVal_Kontextual_100.rds")
+
+pVal_Kontextual_100<-pVal_Kontextual_100%>%
+  filter(p_value<0.05)
+
+pVal_Kontextual_100$ImageID<- pVal_Kontextual_100$imageID
+
+
+pVal_Kontextual_100<- pVal_Kontextual_100 |>
+  mutate(treatment = case_when(
+    ImageID == "1" ~ "AS01",
+    ImageID == "12" ~ "AS01",
+    ImageID == "13" ~ "AS01",
+    ImageID == "17" ~ "AS01",
+    ImageID == "18" ~ "AS01",
+    ImageID == "22" ~ "AS01",
+    ImageID == "25" ~ "AS01",
+    ImageID == "27" ~ "AS01",
+    ImageID == "28" ~ "AS01",
+    ImageID == "5" ~ "AS01",
+    ImageID == "6" ~ "AS01",
+    ImageID == "14" ~ "mock",
+    ImageID == "15" ~ "mock",
+    ImageID == "19" ~ "mock",
+    ImageID == "2" ~ "mock",
+    ImageID == "23" ~ "mock",
+    ImageID == "26" ~ "mock",
+    ImageID == "29" ~ "mock",
+    ImageID == "7" ~ "mock",
+    ImageID == "10" ~ "R848",
+    ImageID == "11" ~ "R848",
+    ImageID == "20" ~ "R848",
+    ImageID == "3" ~ "R848",
+    ImageID == "30" ~ "R848",
+    ImageID == "8" ~ "R848",
+  ))
+
+
+pVal_Kontextual_100 <- pVal_Kontextual_100 |>
+  mutate(DonorID = case_when(
+    ImageID == "1" ~ "LN146.1" ,
+    ImageID == "12"~ "LN163.1",
+    ImageID == "13" ~"LN163.1" ,
+    ImageID == "17"  ~"LN179",
+    ImageID == "18"  ~"LN179",
+    ImageID == "22"  ~"LN212",
+    ImageID == "25"  ~"LN223.2",
+    ImageID == "27"  ~"LN70",
+    ImageID == "28" ~"LN70" ,
+    ImageID == "5"  ~"LN158.1",
+    ImageID == "6"  ~"LN158.1",
+    ImageID == "14"  ~"LN163.1",
+    ImageID == "15"  ~"LN163.1",
+    ImageID == "19"  ~"LN179",
+    ImageID == "2"  ~"LN146.1",
+    ImageID == "23"  ~"LN212",
+    ImageID == "26" ~"LN223.2" ,
+    ImageID == "29"  ~"LN70",
+    ImageID == "7"  ~"LN158.1",
+    ImageID == "10"  ~"LN163.1",
+    ImageID == "11" ~ "LN163.1",
+    ImageID == "20" ~"LN179" ,
+    ImageID == "3" ~ "LN146.1" ,
+    ImageID == "30" ~ "LN70",
+    ImageID == "8"  ~"LN158.1",
+    
+    
+
+  ))
+
+pVal_Kontextual_100_plot<-pVal_Kontextual_100%>%
+  filter(label == "IFNgPosMemoryCD8Tcell__pDC__APC" | label== "cDC1__IFNgPosNaiveCD4Tcell__IFNgPosLymphocyte")
+pVal_Kontextual_100_plot$treatment<- factor(pVal_Kontextual_100_plot$treatment, levels = c("mock", "AS01", "R848"))
+
+
+
+
+ggplot(pVal_Kontextual_100_plot, aes(x = treatment, y = kontextual, fill = treatment)) +
+  geom_boxplot() +
+  facet_wrap(~ label, scales = "free_y") +
+  labs(title = "Kontextual Relationship Value by Treatment Group",
+       x = "Kontextual Cell Pair", y = "Kontextual relationship Value") +
+  theme_classic()
+
+ggsave("20250711_Kontextual_boxplot_2.png", dpi= "retina", height = 7, width = 10 )
+
+
+
+
+
+#####
+
+cell_types <- unique(kontextMat_50)
+lrt_results <- data.frame()
+all_contrasts<- data.frame()
+
+for (ct in colnames(kontextMat_50)) {
+  data_ct <-data.frame(percent= kontextMat_50[,ct],ImageID =as.numeric(rownames(kontextMat_50)))
+  data_ct<-left_join(data_ct, unique(as.data.frame(colData(spe) [,c("DonorID", "treatment", "ImageID")])))
+  
+  # Fit full and reduced models
+  full_model <- lmer(percent ~ treatment+(1 | DonorID),
+                      data = data_ct)
+  reduced_model <- update(full_model, . ~ . - treatment)
+  
+  # Likelihood ratio test
+  lrt <- anova(reduced_model, full_model)
+  p_val <- lrt$`Pr(>Chisq)`[2]
+  
+  lrt_results <- rbind(lrt_results, data.frame(label = ct, p_value = p_val))
+  
+  emmeans_results <- emmeans(full_model, pairwise ~ treatment, adjust = "tukey")
+  contrasts_df <- as.data.frame(emmeans_results$contrasts) 
+  contrasts_df$cell_type <- ct
+  all_contrasts <- rbind(all_contrasts, contrasts_df)
+}
+
+
+lrt_results%>%
+  filter(p_value<0.05)
+
+
+all_contrasts%>%
+  filter(p.value<0.05)
+
+
+saveRDS(lrt_results, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_lrt_results_Kontextual_50_2.rds")
+Kontextual_lrt<-readRDS ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_lrt_results_Kontextual_50_2.rds")
+saveRDS (all_contrasts, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_all_contrasts_Kontextual_50_2.rds")
+Kontextual_all_contrasts<- readRDS ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_all_contrasts_Kontextual_50_2.rds")
+
+
+
+
+
+
+
+```
+
+
+```{r}
+#test spicy one more time with updated IFNg cell types
+
+##FOR THESIS FIGURE
+
+spatialCoordsNames(spe)<-c("X" ,"Y")
+spe$x<-(as.data.frame(spatialCoords(spe))$X)#need to have the spatial data in col for below
+spe$y<-(as.data.frame(spatialCoords(spe))$Y)
+spatialCoordsNames(spe) <- c("x", "y")
+spe$CellID<-(as.data.frame(spe$CellID))
+spe$cells<-spe$uID# wants the spatial data to be "x" and "y" for the below to work
+
+
+
+
+spe_2 <- spe |>
+  mutate(final_cluster= case_when(
+
+
+    final_cluster == "IFNgPosNKInnateLymphocytes" ~ "IFN gamma+ NK/Innate Lymphocytes",
+    final_cluster == "IFNgNegNKInnateLymphocytes" ~ "IFN gamma- NK/Innate Lymphocytes",
+    final_cluster == "FollicularBcell"~ "Follicular B cell",
+    final_cluster == "ExtrafollicularBcell"~ "Extrafollicular B cell",
+    final_cluster == "pDC"~ "pDC",
+    final_cluster == "LangerincDC2"~ "Langerin+ cDC2",
+    final_cluster == "cDC2"~ "cDC2",
+    final_cluster == "CD169NegMacs"~ "CD169- Macs",
+    final_cluster == "cDC1" ~ "cDC1",
+    final_cluster == "CD169PosMacs" ~ "CD169+ Macs",
+    final_cluster == "MonoMac" ~ "Mono/Mac",
+    final_cluster == "IFNgPosMemoryCD8Tcell" ~ "IFN gamma+ Memory CD8 T cell",
+    final_cluster == "IFNgNegMemoryCD8Tcell" ~ "IFN gamma- Memory CD8 T cell",
+    final_cluster == "IFNgPosNaiveCD8Tcell" ~"IFN gamma+ Naive CD8 T cell",
+    final_cluster == "IFNgNegNaiveCD8Tcell" ~"IFN gamma- Naive CD8 T cell",
+    final_cluster == "IFNgposMemoryCD4Tcell"~ "IFN gamma+ Memory CD4 T cell",
+    final_cluster == "IFNgNegMemoryCD4Tcell"~ "IFN gamma- Memory CD4 T cell",
+    final_cluster == "IFNgPosNaiveCD4Tcell"~ "IFN gamma+ Naive CD4 T cell",
+    final_cluster == "IFNgNegNaiveCD4Tcell"~ "IFN gamma- Naive CD4 T cell",
+    final_cluster == "Fibroblast" ~ "Fibroblast",
+    final_cluster == "FRC"~ "FRC",
+    final_cluster == "Adipocyte" ~ "Adipocyte",
+    final_cluster == "LEC" ~ "LEC",
+    final_cluster == "BEC"~ "BEC",
+    final_cluster == "FDC"~ "FDC"
+
+  ))
+
+spe_2$final_cluster_2<-  factor(spe_2$final_cluster, levels=c("Adipocyte", "BEC", "FDC","Fibroblast", "FRC", "LEC", "CD169+ Macs", "CD169- Macs", "Mono/Mac", "Extrafollicular B cell", "Follicular B cell", "IFN gamma+ Memory CD8 T cell", "IFN gamma- Memory CD8 T cell", "IFN gamma+ Naive CD8 T cell", "IFN gamma- Naive CD8 T cell", "IFN gamma- Memory CD4 T cell", "IFN gamma+ Naive CD4 T cell", "IFN gamma- Naive CD4 T cell", "IFN gamma+ NK/Innate Lymphocytes", "IFN gamma- NK/Innate Lymphocytes", "Langerin+ cDC2", "cDC1", "cDC2", "pDC"))
+
+spe_2$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe_2$imageID<-spe$ImageID
+
+unique(spe_2$final_cluster)
+
+mixed_effect_model_50_onemoretime_AS01<-spicy(spe_2, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster",
+              spatialCoords = c("x", "y"),
+              weights=T,
+               sigma = 20,
+              r= 50)
+# 
+# mixed_effect_model_50_onemoretime_AS01_nosigma<-spicy(spe_2, 
+#               condition = "treatment_factor",
+#               covariates = "treatment_factor",
+#               subject = "DonorID",
+#               imageID = "imageID",
+#               cellType = "final_cluster",
+#               spatialCoords = c("x", "y"),
+#               weights=T,
+#                
+#               r= 50)
+
+saveRDS(mixed_effect_model_50_onemoretime_AS01, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250825_Spicy_results IFNg AS01 r_50_3.rds")
+# mixed_effect_model_50_onemoretime_AS01<- readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250825_Spicy_results IFNg AS01 r_50.rds")
+
+marks<- c( "CD169+ Macs", "CD169- Macs", "Mono/Mac", "Extrafollicular B cell", "Follicular B cell", "IFN gamma+ Memory CD8 T cell",  "IFN gamma+ Naive CD8 T cell", "IFN gamma+ Naive CD4 T cell",  "IFN gamma+ NK/Innate Lymphocytes", "Langerin+ cDC2", "cDC1", "cDC2", "pDC")
+
+signifPlot(mixed_effect_model_50_onemoretime_AS01,
+            breaks = c(-0.5,0.5,0.5),
+           cutoff = 0.01,
+           comparisonGroup = "AS01",
+           marksToPlot = marks)
+
+?signifPlot
+
+
+
+ggsave("20250825_spicy_50_AS01_2.tif", dpi= "retina", height = 8, width = 10 )
+
+# 
+# signifPlot(mixed_effect_model_50_onemoretime_AS01_nosigma,
+#             breaks = c(-0.5,0.5,0.5),
+#            cutoff = 0.01,
+#            comparisonGroup = "AS01",
+#            marksToPlot = marks)
+
+
+topPairs(mixed_effect_model_50_onemoretime_AS01)
+
+
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("R848", "AS01", "mock"))
+
+
+mixed_effect_model_50_onemoretime_R848<-spicy(spe,
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster",
+              spatialCoords = c("x", "y"),
+              weights=T,
+               sigma = 20,
+              r= 50)
+
+
+signifPlot(mixed_effect_model_50_onemoretime_R848,
+            breaks = c(-0.5,0.5,0.5),
+           cutoff = 0.01)
+
+saveRDS(mixed_effect_model_50_onemoretime_R848, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250825_Spicy_results IFNg R848 r_50.rds")
+
+ggsave("20250813_spicy_50_R848_2.tif", dpi= "retina", height = 9.5, width = 13 )
+
+
+
+
+?spicy
+```
+
+##nothing below here, except for the tesInteractions, made it into the thesis##
+
+
+```{r}
+##put inhom L function into the mixed effect model
+
+
+
+speKontextual_100_L<-speKontextual_100
+speKontextual_100_L$kontextual<-speKontextual_100$original
+
+kontextMat_100_L <- prepMatrix(speKontextual_100_L)
+
+library(lme4)
+library(emmeans)
+
+cell_types <- unique(kontextMat_100_L)
+lrt_results <- data.frame()
+all_contrasts<- data.frame()
+
+for (ct in colnames(kontextMat_100_L)) {
+  data_ct <-data.frame(percent= kontextMat_100_L[,ct],ImageID =as.numeric(rownames(kontextMat_100_L)))
+  data_ct<-left_join(data_ct, unique(as.data.frame(colData(spe) [,c("DonorID", "treatment", "ImageID")])))
+  
+  # Fit full and reduced models
+  full_model <- lmer(percent ~ treatment+(1 | DonorID),
+                      data = data_ct)
+  reduced_model <- update(full_model, . ~ . - treatment)
+  
+  # Likelihood ratio test
+  lrt <- anova(reduced_model, full_model)
+  p_val <- lrt$`Pr(>Chisq)`[2]
+  
+  lrt_results <- rbind(lrt_results, data.frame(label = ct, p_value = p_val))
+  
+  emmeans_results <- emmeans(full_model, pairwise ~ treatment, adjust = "tukey")
+  contrasts_df <- as.data.frame(emmeans_results$contrasts) 
+  contrasts_df$cell_type <- ct
+  all_contrasts <- rbind(all_contrasts, contrasts_df)
+}
+
+
+L_lrt%>%
+  filter(p_value<0.05)
+
+
+all_contrasts%>%
+  filter(p.value<0.05)
+
+saveRDS(lrt_results, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_lrt_results_Kontextual_100_2_Lfunction.rds")
+L_lrt<- readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_lrt_results_Kontextual_100_2_Lfunction.rds")
+
+saveRDS (all_contrasts, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_all_contrasts_Kontextual_100_2_Lfunction.rds")
+
+
+
+pVal_Kontextual_100_L<-speKontextual_100_L
+pVal_Kontextual_100_L$label<-speKontextual_100_L$test
+
+
+pVal_Kontextual_100_L<-left_join(pVal_Kontextual_100_L, L_lrt, join_by("label"))
+
+saveRDS(pVal_Kontextual_100_L, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250711_pVal_Kontextual_100_L.rds")
+
+pVal_Kontextual_100<-pVal_Kontextual_100%>%
+  filter(p_value<0.05)
+
+pVal_Kontextual_100_L$ImageID<- pVal_Kontextual_100_L$imageID
+
+pVal_Kontextual_100_L<- pVal_Kontextual_100_L |>
+  mutate(treatment = case_when(
+    ImageID == "1" ~ "AS01",
+    ImageID == "12" ~ "AS01",
+    ImageID == "13" ~ "AS01",
+    ImageID == "17" ~ "AS01",
+    ImageID == "18" ~ "AS01",
+    ImageID == "22" ~ "AS01",
+    ImageID == "25" ~ "AS01",
+    ImageID == "27" ~ "AS01",
+    ImageID == "28" ~ "AS01",
+    ImageID == "5" ~ "AS01",
+    ImageID == "6" ~ "AS01",
+    ImageID == "14" ~ "mock",
+    ImageID == "15" ~ "mock",
+    ImageID == "19" ~ "mock",
+    ImageID == "2" ~ "mock",
+    ImageID == "23" ~ "mock",
+    ImageID == "26" ~ "mock",
+    ImageID == "29" ~ "mock",
+    ImageID == "7" ~ "mock",
+    ImageID == "10" ~ "R848",
+    ImageID == "11" ~ "R848",
+    ImageID == "20" ~ "R848",
+    ImageID == "3" ~ "R848",
+    ImageID == "30" ~ "R848",
+    ImageID == "8" ~ "R848",
+  ))
+
+
+pVal_Kontextual_100_L <- pVal_Kontextual_100_L |>
+  mutate(DonorID = case_when(
+    ImageID == "1" ~ "LN146.1" ,
+    ImageID == "12"~ "LN163.1",
+    ImageID == "13" ~"LN163.1" ,
+    ImageID == "17"  ~"LN179",
+    ImageID == "18"  ~"LN179",
+    ImageID == "22"  ~"LN212",
+    ImageID == "25"  ~"LN223.2",
+    ImageID == "27"  ~"LN70",
+    ImageID == "28" ~"LN70" ,
+    ImageID == "5"  ~"LN158.1",
+    ImageID == "6"  ~"LN158.1",
+    ImageID == "14"  ~"LN163.1",
+    ImageID == "15"  ~"LN163.1",
+    ImageID == "19"  ~"LN179",
+    ImageID == "2"  ~"LN146.1",
+    ImageID == "23"  ~"LN212",
+    ImageID == "26" ~"LN223.2" ,
+    ImageID == "29"  ~"LN70",
+    ImageID == "7"  ~"LN158.1",
+    ImageID == "10"  ~"LN163.1",
+    ImageID == "11" ~ "LN163.1",
+    ImageID == "20" ~"LN179" ,
+    ImageID == "3" ~ "LN146.1" ,
+    ImageID == "30" ~ "LN70",
+    ImageID == "8"  ~"LN158.1",
+    
+    
+
+  ))
+
+
+pVal_Kontextual_100_L_plot<-pVal_Kontextual_100_L%>%
+  filter(test == "IFNgPosMemoryCD8Tcell__pDC__APC" | test== "cDC1__IFNgPosNaiveCD4Tcell__IFNgPosLymphocyte")
+pVal_Kontextual_100_L_plot$treatment<- factor(pVal_Kontextual_100_L_plot$treatment, levels = c("mock", "AS01", "R848"))
+
+
+
+
+
+
+
+
+ggplot(pVal_Kontextual_100_L_plot, aes(x = treatment, y = kontextual, fill = treatment)) +
+  geom_boxplot() +
+  facet_wrap(~ label, scales = "free_y") +
+  labs(title = "Inhomogenous L Function Relationship Value by Treatment Group",
+       x = "Kontextual Cell Pair", y = "Inhomogenous L Function Relationshp Value") +
+  theme_classic()
+
+ggsave("20250711_L_function_boxplot_3.png", dpi= "retina", height = 7, width = 10 )
+
+
+
+
+#include this data!
+
+```
+
+##now lets do k function over range of radii
+
+```{r}
+
+
+###TESTING
+speKontextual_50_NK_pDC <- Kontextual(
+  cells = spe,
+  from = "IFNgNegNKInnateLymphocytes",
+  to = "pDC",
+  parent  = c("pDC", "APC"),
+  r = 50,
+  imageID = "ImageID",
+  cellType="final_cluster",
+  spatialCoords = c("x", "y"),
+  inhom = F
+  
+  
+)
+
+saveRDS(speKontextual_50_NK_pDC, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF50_20250716_NK_pDC_1.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+speKontextual_75_NK_pDC <- Kontextual(
+  cells = spe,
+  from = "IFNgNegNKInnateLymphocytes",
+  to = "pDC",
+  parent  = c("pDC", "APC"),
+  r = 75,
+  imageID = "ImageID",
+  cellType="final_cluster",
+  spatialCoords = c("x", "y"),
+  inhom = F
+  
+  
+)
+
+saveRDS(speKontextual_75_NK_pDC, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF75_20250716_NK_pDC_1.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+speKontextual_100_NK_pDC <- Kontextual(
+  cells = spe,
+  from = "IFNgNegNKInnateLymphocytes",
+  to = "pDC",
+  parent  = c("pDC", "APC"),
+  r = 100,
+  imageID = "ImageID",
+  cellType="final_cluster",
+  spatialCoords = c("x", "y"),
+  inhom = F
+  
+  
+)
+
+saveRDS(speKontextual_100_NK_pDC, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF125_202125716_NK_pDC_1.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+speKontextual_125_NK_pDC <- Kontextual(
+  cells = spe,
+  from = "IFNgNegNKInnateLymphocytes",
+  to = "pDC",
+  parent  = c("pDC", "APC"),
+  r = 125,
+  imageID = "ImageID",
+  cellType="final_cluster",
+  spatialCoords = c("x", "y"),
+  inhom = F
+  
+  
+)
+
+saveRDS(speKontextual_125_NK_pDC, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF125_202125716_NK_pDC_1.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+speKontextual_150_NK_pDC <- Kontextual(
+  cells = spe,
+  from = "IFNgNegNKInnateLymphocytes",
+  to = "pDC",
+  parent  = c("pDC", "APC"),
+  r = 150,
+  imageID = "ImageID",
+  cellType="final_cluster",
+  spatialCoords = c("x", "y"),
+  inhom = F
+  
+  
+)
+
+saveRDS(speKontextual_150_NK_pDC, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF150_202150716_NK_pDC_1.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+speKontextual_175_NK_pDC <- Kontextual(
+  cells = spe,
+  from = "IFNgNegNKInnateLymphocytes",
+  to = "pDC",
+  parent  = c("pDC", "APC"),
+  r = 175,
+  imageID = "ImageID",
+  cellType="final_cluster",
+  spatialCoords = c("x", "y"),
+  inhom = F
+  
+  
+)
+
+saveRDS(speKontextual_175_NK_pDC, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF175_202170716_NK_pDC_1.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+speKontextual_200_NK_pDC <- Kontextual(
+  cells = spe,
+  from = "IFNgNegNKInnateLymphocytes",
+  to = "pDC",
+  parent  = c("pDC", "APC"),
+  r = 200,
+  imageID = "ImageID",
+  cellType="final_cluster",
+  spatialCoords = c("x", "y"),
+  inhom = F
+  
+  
+)
+
+saveRDS(speKontextual_200_NK_pDC, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF200_202170716_NK_pDC_1.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+
+
+
+
+
+
+
+
+
+data.frame(append(speKontextual_150_NK_pDC, c(r='150')))
+data.frame(append(speKontextual_125_NK_pDC, c(r='125')))
+data.frame(append(speKontextual_100_NK_pDC, c(r='100')))
+data.frame(append(speKontextual_75_NK_pDC, c(r='75')))
+data.frame(append(speKontextual_50_NK_pDC, c(r='50')))
+
+spe_NK_pDC_all<-rbind(speKontextual_50_NK_pDC, speKontextual_75_NK_pDC, speKontextual_50_NK_pDC, speKontextual_100_NK_pDC, speKontextual_125_NK_pDC, speKontextual_150_NK_pDC)
+
+spe_NK_pDC_all$ImageID<-spe_NK_pDC_all$imageID
+
+spe_NK_pDC_all<- spe_NK_pDC_all |>
+  mutate(treatment = case_when(
+    ImageID == "1" ~ "AS01",
+    ImageID == "12" ~ "AS01",
+    ImageID == "13" ~ "AS01",
+    ImageID == "17" ~ "AS01",
+    ImageID == "18" ~ "AS01",
+    ImageID == "22" ~ "AS01",
+    ImageID == "25" ~ "AS01",
+    ImageID == "27" ~ "AS01",
+    ImageID == "28" ~ "AS01",
+    ImageID == "5" ~ "AS01",
+    ImageID == "6" ~ "AS01",
+    ImageID == "14" ~ "mock",
+    ImageID == "15" ~ "mock",
+    ImageID == "19" ~ "mock",
+    ImageID == "2" ~ "mock",
+    ImageID == "23" ~ "mock",
+    ImageID == "26" ~ "mock",
+    ImageID == "29" ~ "mock",
+    ImageID == "7" ~ "mock",
+    ImageID == "10" ~ "R848",
+    ImageID == "11" ~ "R848",
+    ImageID == "20" ~ "R848",
+    ImageID == "3" ~ "R848",
+    ImageID == "30" ~ "R848",
+    ImageID == "8" ~ "R848",
+  ))
+
+for (ct in colnames(spe_NK_pDC_all)) {
+data.frame(append(spe_NK_pDC_all, c(k_function= (original + r )^2*pi)))
+}
+
+
+
+ggplot(spe_NK_pDC_all, aes(x = r, y = kontextual, fill = treatment)) +
+  geom_boxplot() +
+  labs(title = "Inhomogenous L Function Relationship Value by Treatment Group",
+       x = "Kontextual Cell Pair", y = "KOntextual") +
+  theme_classic()
+
+ggsave("20250711_L_function_boxplot_3.png", dpi= "retina", height = 7, width = 10 )
+
+
+spe_NK_pDC_all$r<-as.numeric(spe_NK_pDC_all$r)
+
+spe_NK_pDC_all= spe_NK_pDC_all|>
+  mutate(kValue = (original + r)^2 * pi)
+
+
+
+
+spe_NK_pDC_all$r<-as.character (spe_NK_pDC_all$r)
+
+
+ggplot(spe_NK_pDC_all, aes(x = r, y =kValue, fill = treatment)) +
+  geom_boxplot() +
+  labs(title = "k val",
+       x = "Kontextual Cell Pair", y = "k val") +
+  theme_classic()
+
+ggsave("20250711_L_function_boxplot_3.png", dpi= "retina", height = 7, width = 10 )
+
+
+spe_NK_pDC_all$r<-as.numeric(spe_NK_pDC_all$r)
+
+ggplot(spe_NK_pDC_all, aes(x = r, y = kValue, col = treatment)) +
+geom_point() +
+geom_smooth(formula = y ~ x, method = "loess", se = FALSE) 
+
+
+
+
+```
+
+
+
+```{r}
+##now lets do IMCrtools on the rejigged final_cluster names to add in the IFNg status
+spe$cellType<-spe$final_cluster
+
+spe$imageID<-spe$ImageID
+
+
+spatialCoordsNames(spe)<-c("X" ,"Y")
+spe$x<-(as.data.frame(spatialCoords(spe))$X)#need to have the spatial data in col for below
+spe$y<-(as.data.frame(spatialCoords(spe))$Y)
+spatialCoordsNames(spe) <- c("x", "y")
+spe$CellID<-(as.data.frame(spe$CellID))
+spe$cells<-spe$uID# wants the spatial data to be "x" and "y" for the below to work
+
+cells_knn <- buildSpatialGraph(spe, 
+                                      img_id = "imageID", 
+                                      type = "knn", 
+                                      k = 20, 
+                                      coords = c("x", "y"),
+                                      name="knn")
+
+saveRDS(cells_knn, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/cells_spe_knn20_20250704.rds")
+
+
+cells_expansion<-buildSpatialGraph(spe, img_id = "ImageID", type = "expansion", name="expansion", threshold = 100,  coords = c("x","y"))
+
+unique(spe$final_cluster)
+
+
+saveRDS(cells_expansion, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/cells_spe_expansion100_20250704_2.rds")
+
+cells<-cells_knn
+
+# convert colPairs object into an abundance matrix
+pairAbundances <- convPairs(cells = cells,
+                  colPair = "knn",
+                  cellType = "cellType")
+
+head(pairAbundances)
+
+cell_types <- unique(pairAbundances)
+lrt_results <- data.frame()
+all_contrasts<- data.frame()
+
+for (ct in colnames(pairAbundances)) {
+  data_ct <-data.frame(percent= pairAbundances[,ct],ImageID =as.numeric(rownames(pairAbundances)))
+  data_ct<-left_join(data_ct, unique(as.data.frame(colData(spe) [,c("DonorID", "treatment", "ImageID")])))
+  
+  # Fit full and reduced models
+  full_model <- lmer(percent ~ treatment+(1 | DonorID),
+                      data = data_ct)
+  reduced_model <- update(full_model, . ~ . - treatment)
+  
+  # Likelihood ratio test
+  lrt <- anova(reduced_model, full_model)
+  p_val <- lrt$`Pr(>Chisq)`[2]
+  
+  lrt_results <- rbind(lrt_results, data.frame(label = ct, p_value = p_val))
+  
+  emmeans_results <- emmeans(full_model, pairwise ~ treatment, adjust = "tukey")
+  contrasts_df <- as.data.frame(emmeans_results$contrasts) 
+  contrasts_df$cell_type <- ct
+  all_contrasts <- rbind(all_contrasts, contrasts_df)
+}
+
+lrt_results%>%
+  filter(p_value<0.05)
+
+all_contrasts%>%
+  filter(p.value<0.05)
+
+
+saveRDS(lrt_results, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_lrt_results_knn20_IFNg.rds")
+IFNg_lrt<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_lrt_results_knn20_IFNg.rds")
+saveRDS(all_contrasts, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_all_contrasts_knn20_IFNg.rds")
+IFNg_all_contrasts<- ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_all_contrasts_knn20_IFNg.rds")
+
+
+IFNg_lrt%>%
+  filter(p_value<0.05)
+
+
+##
+cells_expansion<- readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/cells_spe_expansion100_20250704_2.rds")
+
+
+head(pairAbundances)
+
+cell_types <- unique(pairAbundances)
+lrt_results <- data.frame()
+all_contrasts<- data.frame()
+
+for (ct in colnames(pairAbundances)) {
+  data_ct <-data.frame(percent= pairAbundances[,ct],ImageID =as.numeric(rownames(pairAbundances)))
+  data_ct<-left_join(data_ct, unique(as.data.frame(colData(spe) [,c("DonorID", "treatment", "ImageID")])))
+  
+  # Fit full and reduced models
+  full_model <- lmer(percent ~ treatment+(1 | DonorID),
+                      data = data_ct)
+  reduced_model <- update(full_model, . ~ . - treatment)
+  
+  # Likelihood ratio test
+  lrt <- anova(reduced_model, full_model)
+  p_val <- lrt$`Pr(>Chisq)`[2]
+  
+  lrt_results <- rbind(lrt_results, data.frame(label = ct, p_value = p_val))
+  
+  emmeans_results <- emmeans(full_model, pairwise ~ treatment, adjust = "tukey")
+  contrasts_df <- as.data.frame(emmeans_results$contrasts) 
+  contrasts_df$cell_type <- ct
+  all_contrasts <- rbind(all_contrasts, contrasts_df)
+}
+
+lrt_results%>%
+  filter(p_value<0.05)
+
+all_contrasts%>%
+  filter(p.value<0.05)
+
+m <- as.data.frame(t(pairAbundances))#transpose col to row
+filt <- all_contrasts[all_contrasts$contrast == "AS01 - mock",] #only the contrast i want, have , at end because we want rows
+filt <- filt$p.value<0.05 #only sig val
+m <- m[filt,] # filter for the things i want to plot
+m <- rownames_to_column(m, "pair")#self explanatory
+m <- pivot_longer(m, cols = !pair, names_to = "ImageID", values_to = "val")#pivot to rearrange the values
+
+m<- m |>
+  mutate(treatment = case_when(
+    ImageID == "1" ~ "AS01",
+    ImageID == "12" ~ "AS01",
+    ImageID == "13" ~ "AS01",
+    ImageID == "17" ~ "AS01",
+    ImageID == "18" ~ "AS01",
+    ImageID == "22" ~ "AS01",
+    ImageID == "25" ~ "AS01",
+    ImageID == "27" ~ "AS01",
+    ImageID == "28" ~ "AS01",
+    ImageID == "5" ~ "AS01",
+    ImageID == "6" ~ "AS01",
+    ImageID == "14" ~ "mock",
+    ImageID == "15" ~ "mock",
+    ImageID == "19" ~ "mock",
+    ImageID == "2" ~ "mock",
+    ImageID == "23" ~ "mock",
+    ImageID == "26" ~ "mock",
+    ImageID == "29" ~ "mock",
+    ImageID == "7" ~ "mock",
+    ImageID == "10" ~ "R848",
+    ImageID == "11" ~ "R848",
+    ImageID == "20" ~ "R848",
+    ImageID == "3" ~ "R848",
+    ImageID == "30" ~ "R848",
+    ImageID == "8" ~ "R848",
+  ))
+
+
+m <- m |>
+  mutate(DonorID = case_when(
+    ImageID == "1" ~ "LN146.1" ,
+    ImageID == "12"~ "LN163.1",
+    ImageID == "13" ~"LN163.1" ,
+    ImageID == "17"  ~"LN179",
+    ImageID == "18"  ~"LN179",
+    ImageID == "22"  ~"LN212",
+    ImageID == "25"  ~"LN223.2",
+    ImageID == "27"  ~"LN70",
+    ImageID == "28" ~"LN70" ,
+    ImageID == "5"  ~"LN158.1",
+    ImageID == "6"  ~"LN158.1",
+    ImageID == "14"  ~"LN163.1",
+    ImageID == "15"  ~"LN163.1",
+    ImageID == "19"  ~"LN179",
+    ImageID == "2"  ~"LN146.1",
+    ImageID == "23"  ~"LN212",
+    ImageID == "26" ~"LN223.2" ,
+    ImageID == "29"  ~"LN70",
+    ImageID == "7"  ~"LN158.1",
+    ImageID == "10"  ~"LN163.1",
+    ImageID == "11" ~ "LN163.1",
+    ImageID == "20" ~"LN179" ,
+    ImageID == "3" ~ "LN146.1" ,
+    ImageID == "30" ~ "LN70",
+    ImageID == "8"  ~"LN158.1",
+  ))
+
+m_forplot<-m
+
+m_forplot$treatment<- factor(m$treatment, levels=c("mock", "AS01", "R848"))
+
+ggplot(m_forplot, aes(x=treatment, y=val, fill = "treatment")) +
+  geom_boxplot(aes(fill = treatment)) +
+  facet_wrap(~pair, scales= "free_y") +
+    labs(title = "KNN by Treatment Group",
+       x = "Treatment Group", y = "k nearest neighbour values") +
+  theme_classic()
+
+
+ggsave("20250714_knn_20_box_plot.png", dpi= "retina", height = 7, width = 12 )
+
+
+saveRDS(lrt_results, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250710_lrt_results_expansion100_IFNg.rds")
+# IFNg_lrt<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_lrt_results_knn20_IFNg.rds")
+saveRDS(all_contrasts, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250710_all_contrasts_exansion100_IFNg.rds")
+# IFNg_all_contrasts<- ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_all_contrasts_knn20_IFNg.rds")
+
+NK_df <- as.data.frame(t(pairAbundances))#transpose col to row
+NK_df  <- rownames_to_column(NK_df, "pair")#self explanatory
+NK_df  <- pivot_longer(NK_df, cols = !pair, names_to = "ImageID", values_to = "val")
+
+NK_df<- NK_df|>
+  mutate(treatment = case_when(
+    ImageID == "1" ~ "AS01",
+    ImageID == "12" ~ "AS01",
+    ImageID == "13" ~ "AS01",
+    ImageID == "17" ~ "AS01",
+    ImageID == "18" ~ "AS01",
+    ImageID == "22" ~ "AS01",
+    ImageID == "25" ~ "AS01",
+    ImageID == "27" ~ "AS01",
+    ImageID == "28" ~ "AS01",
+    ImageID == "5" ~ "AS01",
+    ImageID == "6" ~ "AS01",
+    ImageID == "14" ~ "mock",
+    ImageID == "15" ~ "mock",
+    ImageID == "19" ~ "mock",
+    ImageID == "2" ~ "mock",
+    ImageID == "23" ~ "mock",
+    ImageID == "26" ~ "mock",
+    ImageID == "29" ~ "mock",
+    ImageID == "7" ~ "mock",
+    ImageID == "10" ~ "R848",
+    ImageID == "11" ~ "R848",
+    ImageID == "20" ~ "R848",
+    ImageID == "3" ~ "R848",
+    ImageID == "30" ~ "R848",
+    ImageID == "8" ~ "R848",
+  ))
+
+NK_df<-NK_df%>%
+  filter(grepl('IFNgNegNKInnateLymphocytes__|IFNgPosNKInnateLymphocytes__', pair))
+
+NK_df_forplot<-NK_df
+
+NK_df_forplot$treatment<- factor(NK_df$treatment, levels=c("mock", "AS01", "R848"))
+
+ggplot(NK_df_forplot, aes(x=treatment, y=val, fill = "treatment")) +
+  geom_boxplot(aes(fill = treatment)) +
+  facet_wrap(~pair, scales= "free_y") +
+    labs(title = "KNN by Treatment Group",
+       x = "Treatment Group", y = "k nearest neighbour values") +
+  theme_classic()
+
+
+ggsave("20250715_knn_20_NK cells all neighbours.png", dpi= "retina", height = 7, width = 20 )
+
+
+```
+
+```{r}
+## lets do test interactions on these values? also maybe try the spicy bubble plot, but with the knn values?
+
+library(scales)
+out_AS01 <- testInteractions(cells_knn[,cells_knn$treatment == "AS01"], 
+                        group_by = "ImageID",
+                        label = "final_cluster", 
+                        colPairName = "knn",
+                        method= "classic",
+                        iter = 500,
+                        BPPARAM = BiocParallel::SerialParam(RNGseed = 123))
+
+saveRDS (out_AS01, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250717_out_AS01.rds")
+out_AS01<-readRDS ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250717_out_AS01.rds")
+
+unique(out_AS01$to_label)
+
+out_AS01<- out_AS01 %>%
+  as.data.frame%>%
+  mutate(to_label= case_when(
+
+
+    to_label == "IFNgPosNKInnateLymphocytes" ~ "IFN gamma+ NK/Innate Lymphocytes",
+    to_label == "IFNgNegNKInnateLymphocytes" ~ "IFN gamma- NK/Innate Lymphocytes",
+    to_label == "FollicularBcell"~ "Follicular B cell",
+    to_label == "ExtrafollicularBcell"~ "Extrafollicular B cell",
+    to_label == "pDC"~ "pDC",
+    to_label == "LangerincDC2"~ "Langerin+ cDC2",
+    to_label == "cDC2"~ "cDC2",
+    to_label == "CD169NegMacs"~ "CD169- Macs",
+    to_label == "cDC1" ~ "cDC1",
+    to_label == "CD169PosMacs" ~ "CD169+ Macs",
+    to_label == "MonoMac" ~ "Mono/Mac",
+    to_label == "IFNgPosMemoryCD8Tcell" ~ "IFN gamma+ Memory CD8 T cell",
+    to_label == "IFNgNegMemoryCD8Tcell" ~ "IFN gamma- Memory CD8 T cell",
+    to_label == "IFNgPosNaiveCD8Tcell" ~"IFN gamma+ Naive CD8 T cell",
+    to_label == "IFNgNegNaiveCD8Tcell" ~"IFN gamma- Naive CD8 T cell",
+    to_label == "IFNgposMemoryCD4Tcell"~ "IFN gamma+ Memory CD4 T cell",
+    to_label == "IFNgNegMemoryCD4Tcell"~ "IFN gamma- Memory CD4 T cell",
+    to_label == "IFNgPosNaiveCD4Tcell"~ "IFN gamma+ Naive CD4 T cell",
+    to_label == "IFNgNegNaiveCD4Tcell"~ "IFN gamma- Naive CD4 T cell",
+    to_label == "Fibroblast" ~ "Fibroblast",
+    to_label == "FRC"~ "FRC",
+    to_label == "Adipocyte" ~ "Adipocyte",
+    to_label == "LEC" ~ "LEC",
+    to_label == "BEC"~ "BEC",
+    to_label == "FDC"~ "FDC"
+
+  ))
+out_AS01$to_label<-  factor(out_AS01$to_label, levels=c( 
+  
+
+ "Adipocyte",
+ "BEC",
+ "FDC",
+"Fibroblast",
+"FRC",
+"LEC",
+"Follicular B cell",
+ "Extrafollicular B cell",
+ "CD169+ Macs",
+ "CD169- Macs",
+ "Mono/Mac",
+ "IFN gamma+ NK/Innate Lymphocytes",
+"IFN gamma- NK/Innate Lymphocytes",
+"IFN gamma+ Memory CD8 T cell",
+ "IFN gamma- Memory CD8 T cell",
+"IFN gamma+ Naive CD8 T cell",
+"IFN gamma- Naive CD8 T cell",
+ "IFN gamma+ Memory CD4 T cell",
+ "IFN gamma- Memory CD4 T cell",
+ "IFN gamma+ Naive CD4 T cell",
+"IFN gamma- Naive CD4 T cell",
+ "cDC1",
+"Langerin+ cDC2",
+"cDC2",
+"pDC"
+
+))
+
+
+
+
+out_AS01<- out_AS01 %>%
+  as.data.frame%>%
+  mutate(from_label= case_when(
+
+
+    from_label == "IFNgPosNKInnateLymphocytes" ~ "IFN gamma+ NK/Innate Lymphocytes",
+    from_label == "IFNgNegNKInnateLymphocytes" ~ "IFN gamma- NK/Innate Lymphocytes",
+    from_label == "FollicularBcell"~ "Follicular B cell",
+    from_label == "ExtrafollicularBcell"~ "Extrafollicular B cell",
+    from_label == "pDC"~ "pDC",
+    from_label == "LangerincDC2"~ "Langerin+ cDC2",
+    from_label == "cDC2"~ "cDC2",
+    from_label == "CD169NegMacs"~ "CD169- Macs",
+    from_label == "cDC1" ~ "cDC1",
+    from_label == "CD169PosMacs" ~ "CD169+ Macs",
+    from_label == "MonoMac" ~ "Mono/Mac",
+    from_label == "IFNgPosMemoryCD8Tcell" ~ "IFN gamma+ Memory CD8 T cell",
+    from_label == "IFNgNegMemoryCD8Tcell" ~ "IFN gamma- Memory CD8 T cell",
+    from_label == "IFNgPosNaiveCD8Tcell" ~"IFN gamma+ Naive CD8 T cell",
+    from_label == "IFNgNegNaiveCD8Tcell" ~"IFN gamma- Naive CD8 T cell",
+    from_label == "IFNgposMemoryCD4Tcell"~ "IFN gamma+ Memory CD4 T cell",
+    from_label == "IFNgNegMemoryCD4Tcell"~ "IFN gamma- Memory CD4 T cell",
+    from_label == "IFNgPosNaiveCD4Tcell"~ "IFN gamma+ Naive CD4 T cell",
+    from_label == "IFNgNegNaiveCD4Tcell"~ "IFN gamma- Naive CD4 T cell",
+    from_label == "Fibroblast" ~ "Fibroblast",
+    from_label == "FRC"~ "FRC",
+    from_label == "Adipocyte" ~ "Adipocyte",
+    from_label == "LEC" ~ "LEC",
+    from_label == "BEC"~ "BEC",
+    from_label == "FDC"~ "FDC"
+
+  ))
+
+
+out_AS01$from_label<-  factor(out_AS01$from_label, levels=c( 
+  
+ "Adipocyte",
+ "BEC",
+ "FDC",
+"Fibroblast",
+"FRC",
+"LEC",
+"Follicular B cell",
+ "Extrafollicular B cell",
+ "CD169+ Macs",
+ "CD169- Macs",
+ "Mono/Mac",
+ "IFN gamma+ NK/Innate Lymphocytes",
+"IFN gamma- NK/Innate Lymphocytes",
+"IFN gamma+ Memory CD8 T cell",
+ "IFN gamma- Memory CD8 T cell",
+"IFN gamma+ Naive CD8 T cell",
+"IFN gamma- Naive CD8 T cell",
+ "IFN gamma+ Memory CD4 T cell",
+ "IFN gamma- Memory CD4 T cell",
+ "IFN gamma+ Naive CD4 T cell",
+"IFN gamma- Naive CD4 T cell",
+ "cDC1",
+"Langerin+ cDC2",
+"cDC2",
+"pDC"
+
+))
+
+
+library(scales)
+
+# out_AS01<-readRDS ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250717_out_AS01.rds")
+
+
+
+out_AS01 %>% as_tibble() %>%
+    group_by(from_label, to_label) %>%
+    summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>%
+    ggplot() +
+        geom_tile(aes(from_label, to_label, fill = sum_sigval)) +
+        scale_fill_gradient2(low = muted("blue"), mid = "white", high = muted("red")) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1),  text = element_text(size=16))+
+  labs(title = "AS01",
+       x = "'From' Cell Type A", y = "'To' Cell Type B", element_text(size=24))
+
+
+ggsave("20250825_knn_20_NK cells all neighbours_interactions.tif", dpi= "retina", height = 7, width = 10 )
+
+library(scales)
+out_mock <- testInteractions(cells_knn[,cells_knn$treatment == "mock"], 
+                        group_by = "ImageID",
+                        label = "final_cluster", 
+                        colPairName = "knn",
+                        method= "classic",
+                        iter = 500,
+                        BPPARAM = BiocParallel::SerialParam(RNGseed = 123))
+
+
+
+
+saveRDS (out_mock, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250717_out_mock.rds")
+out_mock<-readRDS ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250717_out_mock.rds")
+
+
+out_mock<- out_mock %>%
+  as.data.frame%>%
+  mutate(to_label= case_when(
+
+
+    to_label == "IFNgPosNKInnateLymphocytes" ~ "IFN gamma+ NK/Innate Lymphocytes",
+    to_label == "IFNgNegNKInnateLymphocytes" ~ "IFN gamma- NK/Innate Lymphocytes",
+    to_label == "FollicularBcell"~ "Follicular B cell",
+    to_label == "ExtrafollicularBcell"~ "Extrafollicular B cell",
+    to_label == "pDC"~ "pDC",
+    to_label == "LangerincDC2"~ "Langerin+ cDC2",
+    to_label == "cDC2"~ "cDC2",
+    to_label == "CD169NegMacs"~ "CD169- Macs",
+    to_label == "cDC1" ~ "cDC1",
+    to_label == "CD169PosMacs" ~ "CD169+ Macs",
+    to_label == "MonoMac" ~ "Mono/Mac",
+    to_label == "IFNgPosMemoryCD8Tcell" ~ "IFN gamma+ Memory CD8 T cell",
+    to_label == "IFNgNegMemoryCD8Tcell" ~ "IFN gamma- Memory CD8 T cell",
+    to_label == "IFNgPosNaiveCD8Tcell" ~"IFN gamma+ Naive CD8 T cell",
+    to_label == "IFNgNegNaiveCD8Tcell" ~"IFN gamma- Naive CD8 T cell",
+    to_label == "IFNgposMemoryCD4Tcell"~ "IFN gamma+ Memory CD4 T cell",
+    to_label == "IFNgNegMemoryCD4Tcell"~ "IFN gamma- Memory CD4 T cell",
+    to_label == "IFNgPosNaiveCD4Tcell"~ "IFN gamma+ Naive CD4 T cell",
+    to_label == "IFNgNegNaiveCD4Tcell"~ "IFN gamma- Naive CD4 T cell",
+    to_label == "Fibroblast" ~ "Fibroblast",
+    to_label == "FRC"~ "FRC",
+    to_label == "Adipocyte" ~ "Adipocyte",
+    to_label == "LEC" ~ "LEC",
+    to_label == "BEC"~ "BEC",
+    to_label == "FDC"~ "FDC"
+
+  ))
+out_mock$to_label<-  factor(out_mock$to_label, levels=c( 
+  
+
+ "Adipocyte",
+ "BEC",
+ "FDC",
+"Fibroblast",
+"FRC",
+"LEC",
+"Follicular B cell",
+ "Extrafollicular B cell",
+ "CD169+ Macs",
+ "CD169- Macs",
+ "Mono/Mac",
+ "IFN gamma+ NK/Innate Lymphocytes",
+"IFN gamma- NK/Innate Lymphocytes",
+"IFN gamma+ Memory CD8 T cell",
+ "IFN gamma- Memory CD8 T cell",
+"IFN gamma+ Naive CD8 T cell",
+"IFN gamma- Naive CD8 T cell",
+ "IFN gamma+ Memory CD4 T cell",
+ "IFN gamma- Memory CD4 T cell",
+ "IFN gamma+ Naive CD4 T cell",
+"IFN gamma- Naive CD4 T cell",
+ "cDC1",
+"Langerin+ cDC2",
+"cDC2",
+"pDC"
+
+))
+
+
+
+
+out_mock<- out_mock %>%
+  as.data.frame%>%
+  mutate(from_label= case_when(
+
+
+    from_label == "IFNgPosNKInnateLymphocytes" ~ "IFN gamma+ NK/Innate Lymphocytes",
+    from_label == "IFNgNegNKInnateLymphocytes" ~ "IFN gamma- NK/Innate Lymphocytes",
+    from_label == "FollicularBcell"~ "Follicular B cell",
+    from_label == "ExtrafollicularBcell"~ "Extrafollicular B cell",
+    from_label == "pDC"~ "pDC",
+    from_label == "LangerincDC2"~ "Langerin+ cDC2",
+    from_label == "cDC2"~ "cDC2",
+    from_label == "CD169NegMacs"~ "CD169- Macs",
+    from_label == "cDC1" ~ "cDC1",
+    from_label == "CD169PosMacs" ~ "CD169+ Macs",
+    from_label == "MonoMac" ~ "Mono/Mac",
+    from_label == "IFNgPosMemoryCD8Tcell" ~ "IFN gamma+ Memory CD8 T cell",
+    from_label == "IFNgNegMemoryCD8Tcell" ~ "IFN gamma- Memory CD8 T cell",
+    from_label == "IFNgPosNaiveCD8Tcell" ~"IFN gamma+ Naive CD8 T cell",
+    from_label == "IFNgNegNaiveCD8Tcell" ~"IFN gamma- Naive CD8 T cell",
+    from_label == "IFNgposMemoryCD4Tcell"~ "IFN gamma+ Memory CD4 T cell",
+    from_label == "IFNgNegMemoryCD4Tcell"~ "IFN gamma- Memory CD4 T cell",
+    from_label == "IFNgPosNaiveCD4Tcell"~ "IFN gamma+ Naive CD4 T cell",
+    from_label == "IFNgNegNaiveCD4Tcell"~ "IFN gamma- Naive CD4 T cell",
+    from_label == "Fibroblast" ~ "Fibroblast",
+    from_label == "FRC"~ "FRC",
+    from_label == "Adipocyte" ~ "Adipocyte",
+    from_label == "LEC" ~ "LEC",
+    from_label == "BEC"~ "BEC",
+    from_label == "FDC"~ "FDC"
+
+  ))
+
+
+out_mock$from_label<-  factor(out_mock$from_label, levels=c( 
+  
+ "Adipocyte",
+ "BEC",
+ "FDC",
+"Fibroblast",
+"FRC",
+"LEC",
+"Follicular B cell",
+ "Extrafollicular B cell",
+ "CD169+ Macs",
+ "CD169- Macs",
+ "Mono/Mac",
+ "IFN gamma+ NK/Innate Lymphocytes",
+"IFN gamma- NK/Innate Lymphocytes",
+"IFN gamma+ Memory CD8 T cell",
+ "IFN gamma- Memory CD8 T cell",
+"IFN gamma+ Naive CD8 T cell",
+"IFN gamma- Naive CD8 T cell",
+ "IFN gamma+ Memory CD4 T cell",
+ "IFN gamma- Memory CD4 T cell",
+ "IFN gamma+ Naive CD4 T cell",
+"IFN gamma- Naive CD4 T cell",
+ "cDC1",
+"Langerin+ cDC2",
+"cDC2",
+"pDC"
+
+))
+
+library(scales)
+
+out_mock %>% as_tibble() %>%
+    group_by(from_label, to_label) %>%
+    summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>%
+    ggplot() +
+        geom_tile(aes(from_label, to_label, fill = sum_sigval)) +
+        scale_fill_gradient2(low = muted("blue"), mid = "white", high = muted("red")) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1),  text = element_text(size=16))+
+  labs(title = "Mock",
+       x = "'From' Cell Type A", y = "'To' Cell Type B", element_text(size=24))
+
+
+ggsave("20250825_knn_20_NK cells all neighbours_interactions_mock.tif", dpi= "retina", height = 7, width = 10 )
+
+
+library(scales)
+out_R848 <- testInteractions(cells_knn[,cells_knn$treatment == "R848"], 
+                        group_by = "ImageID",
+                        label = "final_cluster", 
+                        colPairName = "knn",
+                        method= "classic",
+                        iter = 500,
+                        BPPARAM = BiocParallel::SerialParam(RNGseed = 123))
+
+
+
+
+saveRDS (out_R848, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250717_out_R848.rds")
+out_R848<- readRDS ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250717_out_R848.rds")
+
+
+out_R848<- out_R848 %>%
+  as.data.frame%>%
+  mutate(to_label= case_when(
+
+
+    to_label == "IFNgPosNKInnateLymphocytes" ~ "IFN gamma+ NK/Innate Lymphocytes",
+    to_label == "IFNgNegNKInnateLymphocytes" ~ "IFN gamma- NK/Innate Lymphocytes",
+    to_label == "FollicularBcell"~ "Follicular B cell",
+    to_label == "ExtrafollicularBcell"~ "Extrafollicular B cell",
+    to_label == "pDC"~ "pDC",
+    to_label == "LangerincDC2"~ "Langerin+ cDC2",
+    to_label == "cDC2"~ "cDC2",
+    to_label == "CD169NegMacs"~ "CD169- Macs",
+    to_label == "cDC1" ~ "cDC1",
+    to_label == "CD169PosMacs" ~ "CD169+ Macs",
+    to_label == "MonoMac" ~ "Mono/Mac",
+    to_label == "IFNgPosMemoryCD8Tcell" ~ "IFN gamma+ Memory CD8 T cell",
+    to_label == "IFNgNegMemoryCD8Tcell" ~ "IFN gamma- Memory CD8 T cell",
+    to_label == "IFNgPosNaiveCD8Tcell" ~"IFN gamma+ Naive CD8 T cell",
+    to_label == "IFNgNegNaiveCD8Tcell" ~"IFN gamma- Naive CD8 T cell",
+    to_label == "IFNgposMemoryCD4Tcell"~ "IFN gamma+ Memory CD4 T cell",
+    to_label == "IFNgNegMemoryCD4Tcell"~ "IFN gamma- Memory CD4 T cell",
+    to_label == "IFNgPosNaiveCD4Tcell"~ "IFN gamma+ Naive CD4 T cell",
+    to_label == "IFNgNegNaiveCD4Tcell"~ "IFN gamma- Naive CD4 T cell",
+    to_label == "Fibroblast" ~ "Fibroblast",
+    to_label == "FRC"~ "FRC",
+    to_label == "Adipocyte" ~ "Adipocyte",
+    to_label == "LEC" ~ "LEC",
+    to_label == "BEC"~ "BEC",
+    to_label == "FDC"~ "FDC"
+
+  ))
+out_R848$to_label<-  factor(out_R848$to_label, levels=c( 
+  
+
+ "Adipocyte",
+ "BEC",
+ "FDC",
+"Fibroblast",
+"FRC",
+"LEC",
+"Follicular B cell",
+ "Extrafollicular B cell",
+ "CD169+ Macs",
+ "CD169- Macs",
+ "Mono/Mac",
+ "IFN gamma+ NK/Innate Lymphocytes",
+"IFN gamma- NK/Innate Lymphocytes",
+"IFN gamma+ Memory CD8 T cell",
+ "IFN gamma- Memory CD8 T cell",
+"IFN gamma+ Naive CD8 T cell",
+"IFN gamma- Naive CD8 T cell",
+ "IFN gamma+ Memory CD4 T cell",
+ "IFN gamma- Memory CD4 T cell",
+ "IFN gamma+ Naive CD4 T cell",
+"IFN gamma- Naive CD4 T cell",
+ "cDC1",
+"Langerin+ cDC2",
+"cDC2",
+"pDC"
+
+))
+
+
+
+
+out_R848<- out_R848 %>%
+  as.data.frame%>%
+  mutate(from_label= case_when(
+
+
+    from_label == "IFNgPosNKInnateLymphocytes" ~ "IFN gamma+ NK/Innate Lymphocytes",
+    from_label == "IFNgNegNKInnateLymphocytes" ~ "IFN gamma- NK/Innate Lymphocytes",
+    from_label == "FollicularBcell"~ "Follicular B cell",
+    from_label == "ExtrafollicularBcell"~ "Extrafollicular B cell",
+    from_label == "pDC"~ "pDC",
+    from_label == "LangerincDC2"~ "Langerin+ cDC2",
+    from_label == "cDC2"~ "cDC2",
+    from_label == "CD169NegMacs"~ "CD169- Macs",
+    from_label == "cDC1" ~ "cDC1",
+    from_label == "CD169PosMacs" ~ "CD169+ Macs",
+    from_label == "MonoMac" ~ "Mono/Mac",
+    from_label == "IFNgPosMemoryCD8Tcell" ~ "IFN gamma+ Memory CD8 T cell",
+    from_label == "IFNgNegMemoryCD8Tcell" ~ "IFN gamma- Memory CD8 T cell",
+    from_label == "IFNgPosNaiveCD8Tcell" ~"IFN gamma+ Naive CD8 T cell",
+    from_label == "IFNgNegNaiveCD8Tcell" ~"IFN gamma- Naive CD8 T cell",
+    from_label == "IFNgposMemoryCD4Tcell"~ "IFN gamma+ Memory CD4 T cell",
+    from_label == "IFNgNegMemoryCD4Tcell"~ "IFN gamma- Memory CD4 T cell",
+    from_label == "IFNgPosNaiveCD4Tcell"~ "IFN gamma+ Naive CD4 T cell",
+    from_label == "IFNgNegNaiveCD4Tcell"~ "IFN gamma- Naive CD4 T cell",
+    from_label == "Fibroblast" ~ "Fibroblast",
+    from_label == "FRC"~ "FRC",
+    from_label == "Adipocyte" ~ "Adipocyte",
+    from_label == "LEC" ~ "LEC",
+    from_label == "BEC"~ "BEC",
+    from_label == "FDC"~ "FDC"
+
+  ))
+
+
+out_R848$from_label<-  factor(out_R848$from_label, levels=c( 
+  
+ "Adipocyte",
+ "BEC",
+ "FDC",
+"Fibroblast",
+"FRC",
+"LEC",
+"Follicular B cell",
+ "Extrafollicular B cell",
+ "CD169+ Macs",
+ "CD169- Macs",
+ "Mono/Mac",
+ "IFN gamma+ NK/Innate Lymphocytes",
+"IFN gamma- NK/Innate Lymphocytes",
+"IFN gamma+ Memory CD8 T cell",
+ "IFN gamma- Memory CD8 T cell",
+"IFN gamma+ Naive CD8 T cell",
+"IFN gamma- Naive CD8 T cell",
+ "IFN gamma+ Memory CD4 T cell",
+ "IFN gamma- Memory CD4 T cell",
+ "IFN gamma+ Naive CD4 T cell",
+"IFN gamma- Naive CD4 T cell",
+ "cDC1",
+"Langerin+ cDC2",
+"cDC2",
+"pDC"
+
+))
+
+library(scales)
+
+out_R848 %>% as_tibble() %>%
+    group_by(from_label, to_label) %>%
+    summarize(sum_sigval = sum(sigval, na.rm = TRUE)) %>%
+    ggplot() +
+        geom_tile(aes(from_label, to_label, fill = sum_sigval)) +
+        scale_fill_gradient2(low = muted("blue"), mid = "white", high = muted("red")) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1),  text = element_text(size=16))+
+  labs(title = "R848",
+       x = "'From' Cell Type A", y = "'To' Cell Type B", element_text(size=24))
+
+
+ggsave("20250825_2_knn_20_NK cells all neighbours_interactions_R848.tif", dpi= "retina", height = 7, width = 10 )
+
+
+?geom_tile
+
+
+```
+
+```{r}
+#20250813 lets do some patch testing?
+```
+
+
+
+```{r}
+##lets try the above with a lower k value, in case it pulls out a cDC1 and CD8 relationship
+##the cDC1s are v small population, so may need smaller
+
+spe$cellType<-spe$final_cluster
+
+
+cells_knn_15 <- buildSpatialGraph(spe, 
+                                      img_id = "imageID", 
+                                      type = "knn", 
+                                      k = 15, 
+                                      coords = c("x", "y"),
+                                      name="knn")
+cells_knn_10 <- buildSpatialGraph(spe, 
+                                      img_id = "imageID", 
+                                      type = "knn", 
+                                      k = 10, 
+                                      coords = c("x", "y"),
+                                      name="knn")
+
+cells_knn_5 <- buildSpatialGraph(spe, 
+                                      img_id = "imageID", 
+                                      type = "knn", 
+                                      k = 5, 
+                                      coords = c("x", "y"),
+                                      name="knn")
+cells_knn_3 <- buildSpatialGraph(spe, 
+                                      img_id = "imageID", 
+                                      type = "knn", 
+                                      k = 3, 
+                                      coords = c("x", "y"),
+                                      name="knn")
+
+
+saveRDS(cells_knn_15, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/cells_spe_knn15_20250710_2.rds")
+saveRDS(cells_knn_10, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/cells_spe_knn10_20250710_2.rds")
+saveRDS(cells_knn_5, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/cells_spe_knn5_20250710_2.rds")
+saveRDS(cells_knn_3, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/cells_spe_knn3_20250710_2.rds")
+
+
+cells<-cells_knn_15
+
+# convert colPairs object into an abundance matrix
+pairAbundances <- convPairs(cells = cells,
+                  colPair = "knn",
+                  cellType = "cellType")
+
+head(pairAbundances)
+
+cell_types <- unique(pairAbundances)
+lrt_results <- data.frame()
+all_contrasts<- data.frame()
+data_ct_all<-data.frame()
+
+for (ct in colnames(pairAbundances)) {
+  data_ct <-data.frame(percent= pairAbundances[,ct],ImageID =as.numeric(rownames(pairAbundances)))
+  data_ct<-left_join(data_ct, unique(as.data.frame(colData(spe) [,c("DonorID", "treatment", "ImageID")])))
+  
+  # Fit full and reduced models
+  full_model <- lmer(percent ~ treatment+(1 | DonorID),
+                      data = data_ct)
+  reduced_model <- update(full_model, . ~ . - treatment)
+  
+  # Likelihood ratio test
+  lrt <- anova(reduced_model, full_model)
+  p_val <- lrt$`Pr(>Chisq)`[2]
+  
+  lrt_results <- rbind(lrt_results, data.frame(label = ct, p_value = p_val))
+  
+  emmeans_results <- emmeans(full_model, pairwise ~ treatment, adjust = "tukey")
+  contrasts_df <- as.data.frame(emmeans_results$contrasts) 
+  contrasts_df$cell_type <- ct
+  all_contrasts <- rbind(all_contrasts, contrasts_df)
+}
+
+lrt_results%>%
+  filter(p_value<0.05)
+
+all_contrasts%>%
+  filter(p.value<0.05)
+
+
+
+
+
+########## boxplot ##########
+m <- as.data.frame(t(pairAbundances))#transpose col to row
+filt <- all_contrasts[all_contrasts$contrast == "AS01 - mock",] #only the contrast i want, have , at end because we want rows
+filt <- filt$p.value<0.05 #only sig val
+m <- m[filt,] # filter for the things i want to plot
+m <- rownames_to_column(m, "pair")#self explanatory
+m <- pivot_longer(m, cols = !pair, names_to = "ImageID", values_to = "val")#pivot to rearrange the values
+
+m<- m |>
+  mutate(treatment = case_when(
+    ImageID == "1" ~ "AS01",
+    ImageID == "12" ~ "AS01",
+    ImageID == "13" ~ "AS01",
+    ImageID == "17" ~ "AS01",
+    ImageID == "18" ~ "AS01",
+    ImageID == "22" ~ "AS01",
+    ImageID == "25" ~ "AS01",
+    ImageID == "27" ~ "AS01",
+    ImageID == "28" ~ "AS01",
+    ImageID == "5" ~ "AS01",
+    ImageID == "6" ~ "AS01",
+    ImageID == "14" ~ "mock",
+    ImageID == "15" ~ "mock",
+    ImageID == "19" ~ "mock",
+    ImageID == "2" ~ "mock",
+    ImageID == "23" ~ "mock",
+    ImageID == "26" ~ "mock",
+    ImageID == "29" ~ "mock",
+    ImageID == "7" ~ "mock",
+    ImageID == "10" ~ "R848",
+    ImageID == "11" ~ "R848",
+    ImageID == "20" ~ "R848",
+    ImageID == "3" ~ "R848",
+    ImageID == "30" ~ "R848",
+    ImageID == "8" ~ "R848",
+  ))
+
+
+m <- m |>
+  mutate(DonorID = case_when(
+    ImageID == "1" ~ "LN146.1" ,
+    ImageID == "12"~ "LN163.1",
+    ImageID == "13" ~"LN163.1" ,
+    ImageID == "17"  ~"LN179",
+    ImageID == "18"  ~"LN179",
+    ImageID == "22"  ~"LN212",
+    ImageID == "25"  ~"LN223.2",
+    ImageID == "27"  ~"LN70",
+    ImageID == "28" ~"LN70" ,
+    ImageID == "5"  ~"LN158.1",
+    ImageID == "6"  ~"LN158.1",
+    ImageID == "14"  ~"LN163.1",
+    ImageID == "15"  ~"LN163.1",
+    ImageID == "19"  ~"LN179",
+    ImageID == "2"  ~"LN146.1",
+    ImageID == "23"  ~"LN212",
+    ImageID == "26" ~"LN223.2" ,
+    ImageID == "29"  ~"LN70",
+    ImageID == "7"  ~"LN158.1",
+    ImageID == "10"  ~"LN163.1",
+    ImageID == "11" ~ "LN163.1",
+    ImageID == "20" ~"LN179" ,
+    ImageID == "3" ~ "LN146.1" ,
+    ImageID == "30" ~ "LN70",
+    ImageID == "8"  ~"LN158.1",
+  ))
+
+m_forplot<-m
+
+m_forplot$treatment<- factor(m$treatment, levels=c("mock", "AS01", "R848"))
+
+ggplot(m_forplot, aes(x=treatment, y=val, fill = "treatment")) +
+  geom_boxplot(aes(fill = treatment)) +
+  facet_wrap(~pair, scales= "free_y") +
+    labs(title = "KNN by Treatment Group",
+       x = "Treatment Group", y = "k nearest neighbour values") +
+  theme_classic()
+
+
+ggsave("20250714_knn_15_box_plot.png", dpi= "retina", height = 7, width = 12 )
+
+#
+
+cells<-cells_knn_10
+
+# convert colPairs object into an abundance matrix
+pairAbundances <- convPairs(cells = cells,
+                  colPair = "knn",
+                  cellType = "cellType")
+
+head(pairAbundances)
+
+cell_types <- unique(pairAbundances)
+lrt_results <- data.frame()
+all_contrasts<- data.frame()
+
+for (ct in colnames(pairAbundances)) {
+  data_ct <-data.frame(percent= pairAbundances[,ct],ImageID =as.numeric(rownames(pairAbundances)))
+  data_ct<-left_join(data_ct, unique(as.data.frame(colData(spe) [,c("DonorID", "treatment", "ImageID")])))
+  
+  # Fit full and reduced models
+  full_model <- lmer(percent ~ treatment+(1 | DonorID),
+                      data = data_ct)
+  reduced_model <- update(full_model, . ~ . - treatment)
+  
+  # Likelihood ratio test
+  lrt <- anova(reduced_model, full_model)
+  p_val <- lrt$`Pr(>Chisq)`[2]
+  
+  lrt_results <- rbind(lrt_results, data.frame(label = ct, p_value = p_val))
+  
+  emmeans_results <- emmeans(full_model, pairwise ~ treatment, adjust = "tukey")
+  contrasts_df <- as.data.frame(emmeans_results$contrasts) 
+  contrasts_df$cell_type <- ct
+  all_contrasts <- rbind(all_contrasts, contrasts_df)
+}
+
+lrt_results%>%
+  filter(p_value<0.05)
+
+all_contrasts%>%
+  filter(p.value<0.05)
+
+
+saveRDS(lrt_results, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250710_lrt_results_knn10_IFNg.rds")
+# IFNg_lrt<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_lrt_results_knn20_IFNg.rds")
+saveRDS(all_contrasts, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250710_all_contrasts_knn10_IFNg.rds")
+# IFNg_all_contrasts<- ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_all_contrasts_knn20_IFNg.rds")
+
+########## boxplot ##########
+m <- as.data.frame(t(pairAbundances))#transpose col to row
+filt <- all_contrasts[all_contrasts$contrast == "AS01 - mock",] #only the contrast i want, have , at end because we want rows
+filt <- filt$p.value<0.05 #only sig val
+m <- m[filt,] # filter for the things i want to plot
+m <- rownames_to_column(m, "pair")#self explanatory
+m <- pivot_longer(m, cols = !pair, names_to = "ImageID", values_to = "val")#pivot to rearrange the values
+
+m<- m |>
+  mutate(treatment = case_when(
+    ImageID == "1" ~ "AS01",
+    ImageID == "12" ~ "AS01",
+    ImageID == "13" ~ "AS01",
+    ImageID == "17" ~ "AS01",
+    ImageID == "18" ~ "AS01",
+    ImageID == "22" ~ "AS01",
+    ImageID == "25" ~ "AS01",
+    ImageID == "27" ~ "AS01",
+    ImageID == "28" ~ "AS01",
+    ImageID == "5" ~ "AS01",
+    ImageID == "6" ~ "AS01",
+    ImageID == "14" ~ "mock",
+    ImageID == "15" ~ "mock",
+    ImageID == "19" ~ "mock",
+    ImageID == "2" ~ "mock",
+    ImageID == "23" ~ "mock",
+    ImageID == "26" ~ "mock",
+    ImageID == "29" ~ "mock",
+    ImageID == "7" ~ "mock",
+    ImageID == "10" ~ "R848",
+    ImageID == "11" ~ "R848",
+    ImageID == "20" ~ "R848",
+    ImageID == "3" ~ "R848",
+    ImageID == "30" ~ "R848",
+    ImageID == "8" ~ "R848",
+  ))
+
+
+m <- m |>
+  mutate(DonorID = case_when(
+    ImageID == "1" ~ "LN146.1" ,
+    ImageID == "12"~ "LN163.1",
+    ImageID == "13" ~"LN163.1" ,
+    ImageID == "17"  ~"LN179",
+    ImageID == "18"  ~"LN179",
+    ImageID == "22"  ~"LN212",
+    ImageID == "25"  ~"LN223.2",
+    ImageID == "27"  ~"LN70",
+    ImageID == "28" ~"LN70" ,
+    ImageID == "5"  ~"LN158.1",
+    ImageID == "6"  ~"LN158.1",
+    ImageID == "14"  ~"LN163.1",
+    ImageID == "15"  ~"LN163.1",
+    ImageID == "19"  ~"LN179",
+    ImageID == "2"  ~"LN146.1",
+    ImageID == "23"  ~"LN212",
+    ImageID == "26" ~"LN223.2" ,
+    ImageID == "29"  ~"LN70",
+    ImageID == "7"  ~"LN158.1",
+    ImageID == "10"  ~"LN163.1",
+    ImageID == "11" ~ "LN163.1",
+    ImageID == "20" ~"LN179" ,
+    ImageID == "3" ~ "LN146.1" ,
+    ImageID == "30" ~ "LN70",
+    ImageID == "8"  ~"LN158.1",
+  ))
+
+m_forplot<-m
+
+m_forplot$treatment<- factor(m$treatment, levels=c("mock", "AS01", "R848"))
+
+ggplot(m_forplot, aes(x=treatment, y=val, fill = "treatment")) +
+  geom_boxplot(aes(fill = treatment)) +
+  facet_wrap(~pair, scales= "free_y") +
+    labs(title = "KNN by Treatment Group",
+       x = "Treatment Group", y = "k nearest neighbour values") +
+  theme_classic()
+
+
+ggsave("20250714_knn_10_box_plot.png", dpi= "retina", height = 7, width = 12 )
+
+##
+cells<-cells_knn_5
+
+# convert colPairs object into an abundance matrix
+pairAbundances <- convPairs(cells = cells,
+                  colPair = "knn",
+                  cellType = "cellType")
+
+head(pairAbundances)
+
+cell_types <- unique(pairAbundances)
+lrt_results <- data.frame()
+all_contrasts<- data.frame()
+
+for (ct in colnames(pairAbundances)) {
+  data_ct <-data.frame(percent= pairAbundances[,ct],ImageID =as.numeric(rownames(pairAbundances)))
+  data_ct<-left_join(data_ct, unique(as.data.frame(colData(spe) [,c("DonorID", "treatment", "ImageID")])))
+  
+  # Fit full and reduced models
+  full_model <- lmer(percent ~ treatment+(1 | DonorID),
+                      data = data_ct)
+  reduced_model <- update(full_model, . ~ . - treatment)
+  
+  # Likelihood ratio test
+  lrt <- anova(reduced_model, full_model)
+  p_val <- lrt$`Pr(>Chisq)`[2]
+  
+  lrt_results <- rbind(lrt_results, data.frame(label = ct, p_value = p_val))
+  
+  emmeans_results <- emmeans(full_model, pairwise ~ treatment, adjust = "tukey")
+  contrasts_df <- as.data.frame(emmeans_results$contrasts) 
+  contrasts_df$cell_type <- ct
+  all_contrasts <- rbind(all_contrasts, contrasts_df)
+}
+
+lrt_results%>%
+  filter(p_value<0.05)
+
+all_contrasts%>%
+  filter(p.value<0.05)
+
+
+saveRDS(lrt_results, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250710_lrt_results_knn5_IFNg.rds")
+# IFNg_lrt<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_lrt_results_knn20_IFNg.rds")
+saveRDS(all_contrasts, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250710_all_contrasts_knn5_IFNg.rds")
+# IFNg_all_contrasts<- ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_all_contrasts_knn20_IFNg.rds")
+########## boxplot ##########
+m <- as.data.frame(t(pairAbundances))#transpose col to row
+filt <- all_contrasts[all_contrasts$contrast == "AS01 - mock",] #only the contrast i want, have , at end because we want rows
+filt <- filt$p.value<0.05 #only sig val
+m <- m[filt,] # filter for the things i want to plot
+m <- rownames_to_column(m, "pair")#self explanatory
+m <- pivot_longer(m, cols = !pair, names_to = "ImageID", values_to = "val")#pivot to rearrange the values
+
+m<- m |>
+  mutate(treatment = case_when(
+    ImageID == "1" ~ "AS01",
+    ImageID == "12" ~ "AS01",
+    ImageID == "13" ~ "AS01",
+    ImageID == "17" ~ "AS01",
+    ImageID == "18" ~ "AS01",
+    ImageID == "22" ~ "AS01",
+    ImageID == "25" ~ "AS01",
+    ImageID == "27" ~ "AS01",
+    ImageID == "28" ~ "AS01",
+    ImageID == "5" ~ "AS01",
+    ImageID == "6" ~ "AS01",
+    ImageID == "14" ~ "mock",
+    ImageID == "15" ~ "mock",
+    ImageID == "19" ~ "mock",
+    ImageID == "2" ~ "mock",
+    ImageID == "23" ~ "mock",
+    ImageID == "26" ~ "mock",
+    ImageID == "29" ~ "mock",
+    ImageID == "7" ~ "mock",
+    ImageID == "10" ~ "R848",
+    ImageID == "11" ~ "R848",
+    ImageID == "20" ~ "R848",
+    ImageID == "3" ~ "R848",
+    ImageID == "30" ~ "R848",
+    ImageID == "8" ~ "R848",
+  ))
+
+m <- m |>
+  mutate(DonorID = case_when(
+    ImageID == "1" ~ "LN146.1" ,
+    ImageID == "12"~ "LN163.1",
+    ImageID == "13" ~"LN163.1" ,
+    ImageID == "17"  ~"LN179",
+    ImageID == "18"  ~"LN179",
+    ImageID == "22"  ~"LN212",
+    ImageID == "25"  ~"LN223.2",
+    ImageID == "27"  ~"LN70",
+    ImageID == "28" ~"LN70" ,
+    ImageID == "5"  ~"LN158.1",
+    ImageID == "6"  ~"LN158.1",
+    ImageID == "14"  ~"LN163.1",
+    ImageID == "15"  ~"LN163.1",
+    ImageID == "19"  ~"LN179",
+    ImageID == "2"  ~"LN146.1",
+    ImageID == "23"  ~"LN212",
+    ImageID == "26" ~"LN223.2" ,
+    ImageID == "29"  ~"LN70",
+    ImageID == "7"  ~"LN158.1",
+    ImageID == "10"  ~"LN163.1",
+    ImageID == "11" ~ "LN163.1",
+    ImageID == "20" ~"LN179" ,
+    ImageID == "3" ~ "LN146.1" ,
+    ImageID == "30" ~ "LN70",
+    ImageID == "8"  ~"LN158.1",
+  ))
+
+m_forplot<-m
+
+m_forplot$treatment<- factor(m$treatment, levels=c("mock", "AS01", "R848"))
+
+ggplot(m_forplot, aes(x=treatment, y=val, fill = "treatment")) +
+  geom_boxplot(aes(fill = treatment)) +
+  facet_wrap(~pair, scales= "free_y") +
+    labs(title = "KNN by Treatment Group",
+       x = "Treatment Group", y = "k nearest neighbour values") +
+  theme_classic()
+
+
+ggsave("20250714_knn_5_box_plot.png", dpi= "retina", height = 7, width = 12 )
+
+#
+
+
+
+
+##
+cells<-cells_knn_3
+
+# convert colPairs object into an abundance matrix
+pairAbundances <- convPairs(cells = cells,
+                  colPair = "knn",
+                  cellType = "cellType")
+
+head(pairAbundances)
+
+cell_types <- unique(pairAbundances)
+lrt_results <- data.frame()
+all_contrasts<- data.frame()
+
+for (ct in colnames(pairAbundances)) {
+  data_ct <-data.frame(percent= pairAbundances[,ct],ImageID =as.numeric(rownames(pairAbundances)))
+  data_ct<-left_join(data_ct, unique(as.data.frame(colData(spe) [,c("DonorID", "treatment", "ImageID")])))
+  
+  # Fit full and reduced models
+  full_model <- lmer(percent ~ treatment+(1 | DonorID),
+                      data = data_ct)
+  reduced_model <- update(full_model, . ~ . - treatment)
+  
+  # Likelihood ratio test
+  lrt <- anova(reduced_model, full_model)
+  p_val <- lrt$`Pr(>Chisq)`[2]
+  
+  lrt_results <- rbind(lrt_results, data.frame(label = ct, p_value = p_val))
+  
+  emmeans_results <- emmeans(full_model, pairwise ~ treatment, adjust = "tukey")
+  contrasts_df <- as.data.frame(emmeans_results$contrasts) 
+  contrasts_df$cell_type <- ct
+  all_contrasts <- rbind(all_contrasts, contrasts_df)
+}
+
+lrt_results%>%
+  filter(p_value<0.05)
+
+all_contrasts%>%
+  filter(p.value<0.05)
+
+
+saveRDS(lrt_results, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250710_lrt_results_knn3_IFNg.rds")
+# IFNg_lrt<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_lrt_results_knn20_IFNg.rds")
+saveRDS(all_contrasts, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250710_all_contrasts_knn3_IFNg.rds")
+# IFNg_all_contrasts<- ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250704_all_contrasts_knn20_IFNg.rds")
+
+
+m <- as.data.frame(t(pairAbundances))#transpose col to row
+filt <- all_contrasts[all_contrasts$contrast == "AS01 - mock",] #only the contrast i want, have , at end because we want rows
+filt <- filt$p.value<0.05 #only sig val
+m <- m[filt,] # filter for the things i want to plot
+m <- rownames_to_column(m, "pair")#self explanatory
+m <- pivot_longer(m, cols = !pair, names_to = "ImageID", values_to = "val")#pivot to rearrange the values
+
+m<- m |>
+  mutate(treatment = case_when(
+    ImageID == "1" ~ "AS01",
+    ImageID == "12" ~ "AS01",
+    ImageID == "13" ~ "AS01",
+    ImageID == "17" ~ "AS01",
+    ImageID == "18" ~ "AS01",
+    ImageID == "22" ~ "AS01",
+    ImageID == "25" ~ "AS01",
+    ImageID == "27" ~ "AS01",
+    ImageID == "28" ~ "AS01",
+    ImageID == "5" ~ "AS01",
+    ImageID == "6" ~ "AS01",
+    ImageID == "14" ~ "mock",
+    ImageID == "15" ~ "mock",
+    ImageID == "19" ~ "mock",
+    ImageID == "2" ~ "mock",
+    ImageID == "23" ~ "mock",
+    ImageID == "26" ~ "mock",
+    ImageID == "29" ~ "mock",
+    ImageID == "7" ~ "mock",
+    ImageID == "10" ~ "R848",
+    ImageID == "11" ~ "R848",
+    ImageID == "20" ~ "R848",
+    ImageID == "3" ~ "R848",
+    ImageID == "30" ~ "R848",
+    ImageID == "8" ~ "R848",
+  ))
+
+m <- m |>
+  mutate(DonorID = case_when(
+    ImageID == "1" ~ "LN146.1" ,
+    ImageID == "12"~ "LN163.1",
+    ImageID == "13" ~"LN163.1" ,
+    ImageID == "17"  ~"LN179",
+    ImageID == "18"  ~"LN179",
+    ImageID == "22"  ~"LN212",
+    ImageID == "25"  ~"LN223.2",
+    ImageID == "27"  ~"LN70",
+    ImageID == "28" ~"LN70" ,
+    ImageID == "5"  ~"LN158.1",
+    ImageID == "6"  ~"LN158.1",
+    ImageID == "14"  ~"LN163.1",
+    ImageID == "15"  ~"LN163.1",
+    ImageID == "19"  ~"LN179",
+    ImageID == "2"  ~"LN146.1",
+    ImageID == "23"  ~"LN212",
+    ImageID == "26" ~"LN223.2" ,
+    ImageID == "29"  ~"LN70",
+    ImageID == "7"  ~"LN158.1",
+    ImageID == "10"  ~"LN163.1",
+    ImageID == "11" ~ "LN163.1",
+    ImageID == "20" ~"LN179" ,
+    ImageID == "3" ~ "LN146.1" ,
+    ImageID == "30" ~ "LN70",
+    ImageID == "8"  ~"LN158.1",
+  ))
+
+m_forplot<-m
+
+m_forplot$treatment<- factor(m$treatment, levels=c("mock", "AS01", "R848"))
+
+ggplot(m_forplot, aes(x=treatment, y=val, fill = "treatment")) +
+  geom_boxplot(aes(fill = treatment)) +
+  facet_wrap(~pair, scales= "free_y") +
+    labs(title = "KNN by Treatment Group",
+       x = "Treatment Group", y = "k nearest neighbour values") +
+  theme_classic()
+
+
+ggsave("20250714_knn_3_box_plot.png", dpi= "retina", height = 7, width = 12 )
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+##20250702 from Ellis
+kontextualResult <- Kontextual(
+  cells = cells,
+  parentDf = parentDf,
+  r = 100,
+  cellType = "cellType",
+  spatialCoords = c("m.cx","m.cy"),
+  cores = nCores
+)
+
+cells <- getDistances(cells,
+  cellType = "cellTypeMergeTcells",
+  spatialCoords = c("m.cx", "m.cy"),
+  redDimName = "distancesTcells"
+)
+stateChangesTcells <- calcStateChanges(
+  cells,
+  assay = "data",
+  cellType = "cellTypeMergeTcells",
+  type = "distancesTcells",
+  minCells = 5)
+stateMatTcells <- prepMatrix(stateChangesTcells, replaceVal = NA, column = "coef")
+cells <- getAbundances(cells,
+  r = 100,
+  cellType = "cellTypeMergeTcells",
+  spatialCoords = c("m.cx", "m.cy"),
+  redDimName = "abundancesTcells",
+)
+
+assayNames(spe)
+
+?calcStateChanges
+
+##imcrtools for mixed effect model
+cells <- imcRtools::buildSpatialGraph(cells, 
+                                      img_id = "imageID", 
+                                      type = "knn", 
+                                      k = 20, 
+                                      coords = c("x", "y"))
+
+# convert colPairs object into an abundance matrix
+pairAbundances <- convPairs(cells,
+                  colPair = "knn_interaction_graph")
+
+?convPairs
+
+head(pairAbundances["T_cell_CD8__Tumour"])
+```
+
+
+
+
+```{r}
+##lets look closer at the IFNg NKs as per Tony's interest, calculate the top pairs for each treatment
+
+# speAS01<-spe[,spe$treatment=="AS01"]
+# spemock<-spe[,spe$treatment=="mock"]
+# speR848<-spe[,spe$treatment=="R848"]
+# 
+# speKontextual_100_AS01_NK <- Kontextual(
+#   cells = speAS01,
+#   from = "IFNgPosNKInnateLymphocytes",
+#   r = 100,
+#   imageID = "ImageID",
+#   cellType="final_cluster",
+#   spatialCoords = c("x", "y"),
+#   inhom = T
+#   
+#   
+# )
+# 
+# saveRDS(speKontextual_100_AS01_NK, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_100_20250702_NK.rds")
+
+
+
+
+```
+
+
+##testing round 2
+
+
+```{r}
+
+##round 2
+
+##if this works then change the hierarchy again, would be very interesting to compare between functional status as parent, rather than immune cell hierarchy. Can compare the two and see changes in relationships
+set.seed(123)
+setwd("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis")
+
+spe<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250521_final_cluster_fixed_adipo_RO.rds")
+
+#clean the spe
+
+
+#clean up the cells a little bit more, don't want cells to have NA in "total spots estimated"
+spe$total_estimated_spots_fixed<- ifelse(
+is.na(spe$total.estimated.spots), 
+"0", spe$total.estimated.spots)
+spe <- spe |>
+  mutate(Parent = case_when(
+    Parent == "Annotation (B cell zone)" ~ "B cell zone",
+    Parent == "Annotation (Capsule)" ~ "Capsule",
+    Parent == "Annotation (Parenchyma)" ~ "Parenchyma",
+    Parent == "Annotation (Empty)" ~ "Empty",
+    Parent == "B cell zone" ~ "B cell zone",
+    Parent == "Capsule" ~ "Capsule",
+    Parent == "Parenchyma" ~ "Parenchyma",
+    Parent == "Empty" ~ "Empty",
+    Parent == "Root object (Image)" ~ "Empty", # cells on edges that are in empty areas, did not get a classification
+    Parent == "NA" ~ "Empty" # cells on edges that are in empty areas, did not get a classification
+  ))
+
+# now we want to remove any cells from the "empty" area, they are not of interest/also not cells
+#clean up the cells a little bit more, don't want cells that have NA in "total spots estimated", these are cells that are again out of bounds so could not calculate
+
+
+spe<-spe[,spe$Parent!="Empty"]
+length(spe$uID)
+
+spe <- spe|>
+  mutate(DonorID = case_when(
+    DonorID == "LN179" ~ "LN179",
+    DonorID == "LN163.1" ~ "LN163.1",
+    DonorID == "LN162.1" ~ "LN163.1",
+    DonorID == "LN158.1" ~ "LN158.1",
+    DonorID == "LN146.1" ~ "LN146.1",
+    DonorID == "LN70" ~ "LN70",
+    DonorID == "LN212" ~ "LN212",
+    DonorID == "LN217" ~ "LN217",
+    DonorID == "LN223.2" ~ "LN223.2", # cells on edges that are in empty areas, did not get a classification
+    DonorID == "LN154" ~ "LN154" # cells on edges that are in empty areas, did not get a classification
+  ))
+
+# dittoBarPlot(spe, var = "treatment", group.by = "DonorID")
+
+#based on the above, we want to remove LN154 and LN217 from this analysis, as they are mock only.
+
+spe<-spe[, colData(spe)$DonorID!="LN154"]
+spe<-spe[, colData(spe)$DonorID!="LN217"]
+# spe<-spe[, colData(spe)$DonorID!="LN212"]
+# spe<-spe[, colData(spe)$DonorID!="LN223.2"]
+
+# dittoBarPlot(spe, var = "treatment", group.by = "DonorID")
+# 
+# ggsave("20250523_percent cells by treatment.png", dpi= "print", height = 7, width = 10 )
+
+#now clean up the channel names so I can make nicer graphs
+
+unique(rownames(spe))
+
+rownames(spe)<- c("Vimentin", "115In", "CD20",            
+"Collagen III","143Nd", "IFN gamma"
+,"CD83","CD8","Podoplanin","CD16","149Sm", "CD21"                   
+, "Langerin", "CD68","CD45" , "CD31", "CXCR3", "CD56","CCR7", "CD14", "FXIIIA"                
+, "CCR6", "CD11b", "CD45RO", "NaKATPase", "Perilipin1", "CD11c",                
+"Ki67","Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
+"HLA_DR","CD303", "CXCR5", "DNA1", "DNA2")
+
+unique(rownames(spe))
+
+rowSubset (spe)<- c("Vimentin",  "CD20",            
+"Collagen III", "IFN gamma"
+,"CD83","CD8","Podoplanin","CD16", "CD21"                   
+, "Langerin", "CD68","CD45" , "CD31", "CXCR3", "CD56","CCR7", "CD14", "FXIIIA"                
+, "CCR6", "CD11b", "CD45RO", "Perilipin1", "CD11c",                
+"Ki67","Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
+"HLA_DR","CD303", "CXCR5")  
+
+rowSubset(spe)
+
+
+#saveRDS (spe, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250521_final_cluster_fixed_adipo_RO_cleaned for spatial.rds")
+
+
+#for our spatial analysis, we are no longer interested in T0h images so remove them
+spe<-spe[,spe$treatment!="T0h"]
+
+#first calculate some percentages of cell types of all cell types here. filter later and show any changes between conditions. do the subcapsular macs disappear?
+#make some conditions to decide functional status
+CD83pos<-assay(spe,"data")["CD83",]>0.12 
+
+IFNgpos<-assay(spe,"data")["IFN gamma",]>0.1
+Ki67pos<-assay(spe,"data")["Ki67",]>0.1
+CXCR3pos<-assay(spe,"data")["CXCR3",]>0.09#check this threshold in mantis to decide
+
+#sum(is.na(spe$total.estimated.spots))
+# spe$total.estimated.spots[is.na(spe$total.estimated.spots)]<-0
+#sum(is.na(spe$total.estimated.spots))
+
+
+# CCR6pos<-assay(spe,"data")["CCR6",]>0.05
+# CCR7pos<-assay(spe,"data")["CCR7",]>0.07
+```
+
+
+
+
+###
+
+```{r}
+
+spe$fixed_cDC2 <- ifelse(assay(spe,"data")["CD83",]>0.12  & spe$final_cluster == "cDC2", 
+                   
+                   "CD83PoscDC2", spe$final_cluster)
+
+unique(spe$fixed_cDC2)
+
+test<-spe|>
+  filter(is.na(spe$fixed_cDC2))
+
+spe$fixed_cDC2_1 <- ifelse(assay(spe,"data")["CD83",]<=0.12  & spe$final_cluster == "cDC2", 
+                   
+                   "CD83NegcDC2", spe$fixed_cDC2)
+
+
+
+unique(spe$fixed_cDC2_1)
+
+test<-spe|>
+  filter(is.na(spe$fixed_cDC2_1))
+
+
+spe <- spe |>
+  mutate(final_cluster= case_when(
+    
+    
+    final_cluster == "NK/Innate Lymphocytes" & IFNgpos ~ "IFNgPosNKInnateLymphocytes",
+    final_cluster == "NK/Innate Lymphocytes" & !IFNgpos ~ "IFNgNegNKInnateLymphocytes",
+    final_cluster == "Follicular B cell"~ "FollicularBcell",
+    final_cluster == "Extrafollicular B cell"~ "ExtrafollicularBcell",
+    final_cluster == "pDC" & !CD83pos ~ "CD83NegpDC",
+    final_cluster == "pDC" & CD83pos ~ "CD83PospDC",
+    final_cluster == "Langerin+ cDC2" & CD83pos~ "CD83PosLangerincDC2",
+    final_cluster == "Langerin+ cDC2" & !CD83pos~ "CD83NegLangerincDC2",
+    fixed_cDC2_1 == "CD83NegcDC2 "~ "CD83NegcDC2",
+    fixed_cDC2 == "CD83PoscDC2" ~ "CD83PoscDC2",
+    final_cluster == "CD169- macs"& CD83pos~ "CD83PosCD169NegMacs",
+    final_cluster == "CD169- macs"& !CD83pos~ "CD83NegCD169NegMacs",
+    final_cluster == "cDC1" & CD83pos~ "CD83PoscDC1",
+    final_cluster == "cDC1" & !CD83pos~ "CD83NegcDC1",
+    final_cluster == "CD169+ macs"& CD83pos ~ "CD83PosCD169PosMacs",
+    final_cluster == "CD169+ macs"& !CD83pos ~ "CD83NegCD169PosMacs",
+    final_cluster == "Mono/mac" ~ "MonoMac",
+    final_cluster == "Memory CD8+ T cell" & IFNgpos ~ "IFNgPosMemoryCD8Tcell",
+    final_cluster == "Memory CD8+ T cell" & !IFNgpos ~ "IFNgNegMemoryCD8Tcell",
+    final_cluster == "Naive CD8+ T cell" & IFNgpos ~"IFNgPosNaiveCD8Tcell",
+    final_cluster == "Naive CD8+ T cell" & !IFNgpos ~"IFNgNegNaiveCD8Tcell",
+    final_cluster == "Memory CD4+ T cell"& IFNgpos~ "IFNgposMemoryCD4Tcell",
+    final_cluster == "Memory CD4+ T cell"& !IFNgpos~ "IFNgNegMemoryCD4Tcell",
+    final_cluster == "Naive CD4+ T cell" & IFNgpos~ "IFNgPosNaiveCD4Tcell",
+    final_cluster == "Naive CD4+ T cell" & !IFNgpos~ "IFNgNegNaiveCD4Tcell",
+    final_cluster == "Fibroblast" ~ "Fibroblast",
+    final_cluster == "FRC"~ "FRC",
+    final_cluster == "Adipocyte" ~ "Adipocyte",
+    final_cluster == "LEC" ~ "LEC",
+    final_cluster == "BEC"~ "BEC",
+    final_cluster == "FDC"~ "FDC"
+
+  ))
+
+
+unique(spe$final_cluster)
+
+test<-spe|>
+  filter(is.na(spe$final_cluster))
+
+unique(test$final_cluster)
+unique(test$fixed_cDC2_1)
+unique(test$fixed_cDC2)
+sum(test$final_cluster == "CD83PoscDC1")
+sum(spe$final_cluster == "CD83PoscDC1")
+
+
+##my CD83neg cDC2s aren't staying in... add them back in here
+
+spe$final_cluster_1 <- ifelse(is.na(spe$final_cluster), 
+                   
+                   "CD83NegcDC2", spe$final_cluster)
+unique(spe$final_cluster_1)
+
+
+
+unique(spe$final_cluster)
+
+biologicalHierarchy=list(
+  CD169PosMacs=c("CD83PosCD169PosMacs","CD83NegCD169PosMacs"),
+  CD169NegMacs =c("CD83PosCD169NegMacs","CD83NegCD169NegMacs"),
+  MonoMac =   "MonoMac",
+  pDC = c("CD83PospDC","CD83NegpDC"),
+  cDC1 =c("CD83PoscDC1","CD83NegcDC1"),
+  cDC2 = c("CD83PoscDC2" , "CD83NegcDC2" ), 
+  LangerincDC2 = c("CD83PosLangerincDC2" , "CD83NegLangerincDC2"),
+  Stromal=c ("FRC", "Fibroblast" , "BEC" ,    "FDC" ,   "Adipocyte" , "LEC"),     
+  CD4_T_cell=c ("IFNgposMemoryCD4Tcell", "IFNgNegMemoryCD4Tcell", "IFNgPosNaiveCD4Tcell", "IFNgNegNaiveCD4Tcell") ,
+  CD8_T_cell=c("IFNgPosMemoryCD8Tcell", "IFNgNegMemoryCD8Tcell", "IFNgPosNaiveCD8Tcell", "IFNgNegNaiveCD8Tcell"),
+  B_cell= c("ExtrafollicularBcell", "FollicularBcell")
+)
+
+
+# here add some more categories
+biologicalHierarchy$potential_IFNg_producing_lymphocytes =c (biologicalHierarchy$CD4_T_cell,biologicalHierarchy$CD8_T_cell,
+                                "IFNgPosNKInnateLymphocytes", "IFNgNegNKInnateLymphocytes")
+
+#have the APCs on their own and also in broader context
+biologicalHierarchy$APC =c (biologicalHierarchy$CD169PosMacs,biologicalHierarchy$CD169NegMacs,
+                                biologicalHierarchy$pDC, biologicalHierarchy$cDC1, biologicalHierarchy$cDC2,
+                             biologicalHierarchy$LangerincDC2, biologicalHierarchy$MonoMac )
+
+
+
+
+all<-unique(spe$final_cluster_1)
+
+
+```
+
+
+```{r}
+
+
+#fix spe
+
+
+spatialCoordsNames(spe)<-c("X" ,"Y")
+spe$x<-(as.data.frame(spatialCoords(spe))$X)#need to have the spatial data in col for below
+spe$y<-(as.data.frame(spatialCoords(spe))$Y)
+spatialCoordsNames(spe) <- c("x", "y")
+spe$CellID<-(as.data.frame(spe$CellID))
+spe$cells<-spe$uID# wants the spatial data to be "x" and "y" for the below to work
+
+
+
+spe|>
+  colData()|>
+  as.data.frame()|>
+  filter(ImageID== "17")|>
+  filter(final_cluster_1%in%c ("CD83NegcDC2", "IFNgPosNaiveCD8Tcell", "IFNgPosNKInnateLymphocytes") )|>
+  arrange(final_cluster_1)|>
+    ggplot(aes(x = x, y = y, color = final_cluster_1)) +
+  geom_point(size = 1) +
+  theme_classic()+
+  scale_colour_manual(values = c("CD83NegcDC2" = "#DCE319FF", "IFNgPosNaiveCD8Tcell"= "#481567FF",   "IFNgPosNKInnateLymphocytes" = "#2D708Eff" )) +
+  guides(colour = guide_legend(title = "Cell types", override.aes = list(size = 3)))
+
+
+
+# sum(spe$cellTypeNew == "CD83_cDC2")
+
+parentDf <- parentCombinations(
+  all = all, parentList= biologicalHierarchy
+)
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250627_parent_DF_3_CD83")
+
+```
+
+```{r}
+
+speKontextual_50 <- Kontextual(
+  cells = spe,
+  parentDf = parentDf,
+  r = 50,
+  imageID = "ImageID",
+  cellType="final_cluster_1",
+  spatialCoords = c("x", "y"),
+  inhom = T
+  
+  
+)
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF50_20250627_1_CD83.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+saveRDS(speKontextual_50, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250627_1_CD83.rds")
+# speKontextual_50<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250619.rds")
+
+kontextMat_50 <- prepMatrix(speKontextual_50)
+
+mixed_effect_model_50<-spicy(spe, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster_1",
+              spatialCoords = c("x", "y"),
+              weights=T,
+              alternateResult = kontextMat_50)
+
+saveRDS(mixed_effect_model_50, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/mixed_effect_20250627_1_CD83_50.rds")
+
+signifPlot(mixed_effect_model_50,
+            breaks = c(-7,7,1))
+?signifPlot
+# contextLabels = list("CD169+ Macrophage", "CD169- Macrophage", "Monocyte/Macrophage",  "pDC",  "cDC1",   "cDC2" , "Langerin+ cDC2",
+#                      
+#                     "Stromal", "CD4 T cell", "CD8 T cell", "B cell", "Potential IFNgamma producing lymphocytes", "APC")
+# 
+# 
+# 
+# signifPlot(mixed_effect_model_50,
+#             breaks = c(-7,7,1), contextLabels = contextLabels)
+# 
+ggsave("20250627_significance plot by context_AS01_50_6_CD83.png", dpi= "retina", height = 9.5, width = 15 )
+
+
+
+
+#################
+
+speKontextual_100 <- Kontextual(
+  cells = spe,
+  parentDf = parentDf,
+  r = 100,
+  imageID = "ImageID",
+  cellType="final_cluster_1",
+  spatialCoords = c("x", "y"),
+  inhom = T
+  
+  
+)
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF100_20250627_CD83.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+saveRDS(speKontextual_100, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_100_20250627_1_CD83.rds")
+# speKontextual_50<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250619.rds")
+
+kontextMat_100 <- prepMatrix(speKontextual_100)
+
+mixed_effect_model_100<-spicy(spe, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster_1",
+              spatialCoords = c("x", "y"),
+              weights=T,
+              alternateResult = kontextMat_100)
+
+saveRDS(mixed_effect_model_100, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/mixed_effect_20250627_1_CD83_100.rds")
+
+signifPlot(mixed_effect_model_100,
+            breaks = c(-9,9,1))
+?signifPlot
+# contextLabels = list("CD169+ Macrophage", "CD169- Macrophage", "Monocyte/Macrophage",  "pDC",  "cDC1",   "cDC2" , "Langerin+ cDC2",
+#                      
+#                     "Stromal", "CD4 T cell", "CD8 T cell", "B cell", "Potential IFNgamma producing lymphocytes", "APC")
+# 
+# 
+# 
+# signifPlot(mixed_effect_model_50,
+#             breaks = c(-7,7,1), contextLabels = contextLabels)
+# 
+ggsave("20250627_significance plot by context_AS01_100_7_CD83.png", dpi= "retina", height = 9.5, width = 15 )
+
+
+
+#####yyesss this worked too! Let's change the biological hierarchy around to split by functional status
+
+```
+```{r}
+###change up the hierarchy 
+
+unique(spe$final_cluster)
+
+biologicalHierarchy=list(
+  CD83PosAPC=c("CD83PosCD169PosMacs","CD83NegCD169PosMacs", "CD83PospDC", "CD83PoscDC1", "CD83PoscDC2" , "CD83PosLangerincDC2"),
+  CD83NegAPC =c("CD83PosCD169NegMacs","CD83NegCD169NegMacs", "CD83NegpDC", "CD83NegcDC1", "CD83NegcDC2" , "CD83NegLangerincDC2"),
+  Stromal=c ("FRC", "Fibroblast" , "BEC" ,    "FDC" ,   "Adipocyte" , "LEC"),     
+  IFNgNegLymphocyte=c ( "IFNgNegMemoryCD8Tcell", "IFNgNegNaiveCD4Tcell", "IFNgNegNaiveCD8Tcell", "IFNgNegMemoryCD4Tcell", "IFNgNegNKInnateLymphocytes") ,
+  IFNgPosLymphocyte=c("IFNgPosMemoryCD8Tcell",  "IFNgPosNaiveCD4Tcell",  "IFNgPosNaiveCD8Tcell", "IFNgposMemoryCD4Tcell", "IFNgPosNKInnateLymphocytes"),
+  B_cell= c("ExtrafollicularBcell", "FollicularBcell")
+)
+
+
+# here add some more categories
+biologicalHierarchy$Lymphocytes =c (biologicalHierarchy$IFNgNegLymphocyte,biologicalHierarchy$IFNgPosLymphocyte)
+
+#have the APCs on their own and also in broader context
+biologicalHierarchy$APC =c (biologicalHierarchy$CD83PosAPC,biologicalHierarchy$CD83NegAPC,
+                                "MonoMac" )
+
+
+
+
+all<-unique(spe$final_cluster_1)
+
+parentDf <- parentCombinations(
+  all = all, parentList= biologicalHierarchy
+)
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250629_parent_DF_3_CD83")
+
+
+```
+
+```{r}
+
+speKontextual_50 <- Kontextual(
+  cells = spe,
+  parentDf = parentDf,
+  r = 50,
+  imageID = "ImageID",
+  cellType="final_cluster_1",
+  spatialCoords = c("x", "y"),
+  inhom = T
+  
+  
+)
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF50_20250629_1.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+saveRDS(speKontextual_50, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250629_1.rds")
+# speKontextual_50<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250619.rds")
+
+kontextMat_50 <- prepMatrix(speKontextual_50)
+
+mixed_effect_model_50<-spicy(spe, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster_1",
+              spatialCoords = c("x", "y"),
+              weights=T,
+              alternateResult = kontextMat_50)
+
+saveRDS(mixed_effect_model_50, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/mixed_effect_20250629_1_50.rds")
+
+signifPlot(mixed_effect_model_50,
+            breaks = c(-7,7,1))
+?signifPlot
+# contextLabels = list("CD169+ Macrophage", "CD169- Macrophage", "Monocyte/Macrophage",  "pDC",  "cDC1",   "cDC2" , "Langerin+ cDC2",
+#                      
+#                     "Stromal", "CD4 T cell", "CD8 T cell", "B cell", "Potential IFNgamma producing lymphocytes", "APC")
+# 
+# 
+# 
+# signifPlot(mixed_effect_model_50,
+#             breaks = c(-7,7,1), contextLabels = contextLabels)
+# 
+ggsave("20250629_significance plot by context_AS01_50_6.png", dpi= "print", height = 9.5, width = 15 )
+
+
+
+
+#################
+
+speKontextual_100 <- Kontextual(
+  cells = spe,
+  parentDf = parentDf,
+  r = 100,
+  imageID = "ImageID",
+  cellType="final_cluster_1",
+  spatialCoords = c("x", "y"),
+  inhom = T
+  
+  
+)
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextualDF50_20250629_2.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+saveRDS(speKontextual_100, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_100_20250629_1.rds")
+# speKontextual_50<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250619.rds")
+
+kontextMat_100 <- prepMatrix(speKontextual_100)
+
+mixed_effect_model_100<-spicy(spe, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster_1",
+              spatialCoords = c("x", "y"),
+              weights=T,
+              alternateResult = kontextMat_100)
+
+saveRDS(mixed_effect_model_100, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/mixed_effect_20250629_1_100.rds")
+
+signifPlot(mixed_effect_model_100,
+            breaks = c(-9,9,1))
+?signifPlot
+# contextLabels = list("CD169+ Macrophage", "CD169- Macrophage", "Monocyte/Macrophage",  "pDC",  "cDC1",   "cDC2" , "Langerin+ cDC2",
+#                      
+#                     "Stromal", "CD4 T cell", "CD8 T cell", "B cell", "Potential IFNgamma producing lymphocytes", "APC")
+# 
+# 
+# 
+# signifPlot(mixed_effect_model_50,
+#             breaks = c(-7,7,1), contextLabels = contextLabels)
+# 
+ggsave("20250629_significance plot by context_AS01_100_7.png", dpi= "retina", height = 9.5, width = 15 )
+
+```
+
+
+
+```{r}
+df <- colData(spe) %>%
+  as.data.frame() %>%
+  group_by(DonorID, treatment, final_cluster,Signed.distance.to.annotation.with.Capsule.µm ) %>%
+  summarise(counts = n(), .groups = "drop_last") %>%
+  mutate(total = sum(counts)) %>%
+  mutate(percent = 100 * counts / total)%>%
+  filter(treatment!= "T0h")%>%
+  filter(final_cluster!= "Adipocyte")%>%
+    filter(final_cluster!= "LEC")%>%
+    filter(final_cluster!= "BEC")%>%
+    filter(final_cluster!= "FRC")%>%
+    filter(final_cluster!= "Fibroblast")%>%
+    filter(final_cluster!= "FDC")
+
+
+
+
+df$treatment_factor<- factor(df$treatment, levels=c("mock", "AS01", "R848"))
+
+df$percent<-df$Signed.distance.to.annotation.with.Capsule.µm
+cell_types <- unique(df$final_cluster)
+lrt_results <- data.frame()
+all_contrasts<- data.frame()
+
+for (ct in cell_types) {
+  data_ct <- df %>% filter(final_cluster == ct)
+  
+  # Fit full and reduced models
+  full_model <- lmer(percent ~ treatment + (1 | DonorID),
+                      data = data_ct)
+  reduced_model <- update(full_model, . ~ . - treatment)
+  
+  # Likelihood ratio test
+  lrt <- anova(reduced_model, full_model)
+  p_val <- lrt$`Pr(>Chisq)`[2]
+  
+  lrt_results <- rbind(lrt_results, data.frame(final_cluster = ct, p_value = p_val))
+  
+  emmeans_results <- emmeans(full_model, pairwise ~ treatment, adjust = "tukey")
+  contrasts_df <- as.data.frame(emmeans_results$contrasts) 
+  contrasts_df$cell_type <- ct
+  all_contrasts <- rbind(all_contrasts, contrasts_df)
+  
+  
+
+}
+
+
+
+
+plot_data <- df %>%
+  group_by(final_cluster, treatment_factor, DonorID, percent) %>%
+  left_join(lrt_results, by = "final_cluster")
+
+# Create p-value labels
+pval_labels <- lrt_results %>%
+  mutate(label = paste0("p = ", signif(p_value, 3)))
+
+pval_labels_posthoc <- all_contrasts %>%
+  mutate(label = signif(p.value, digits=3))
+
+
+
+pval_to_stars <- function(p) {
+  if (p < 0.001) return("***")
+  else if (p < 0.01) return("**")
+  else if (p < 0.05) return("*")
+  else return("ns")
+}
+
+pval_labels <- lrt_results %>%
+  mutate(label = sapply(p_value, pval_to_stars))
+
+pval_labels_posthoc <- all_contrasts %>%
+  mutate(label = sapply(p.value, pval_to_stars))
+head(spe$Signed.distance.to.annotation.with.Capsule.µm)
+
+max_percent <- plot_data %>%
+  group_by(pair) %>%
+  summarise(max = max(percent))
+
+ggplot(plot_data, aes(x=treatment, y=percent, fill = "treatment_factor")) +
+  geom_boxplot(aes(fill = treatment, , scales= "free_y")) +
+  facet_wrap(~final_cluster) +
+    labs(title = "KNN by Treatment Group",
+       x = "Treatment Group", y = "k nearest neighbour values") +
+  theme_classic()
+
+
+all_contrasts %>%
+filter(p.value < 0.05)
+```
+
+
+######## ignore everything below here
+
+
+
+
+```{r}
+
+
+spe$fixed_cDC2 <- ifelse(assay(spe,"data")["CD83",]>0.12  & spe$final_cluster == "cDC2", 
+                   
+                   "CD83PoscDC2", spe$final_cluster)
+
+unique(spe$fixed_cDC2)
+
+test<-spe|>
+  filter(is.na(spe$fixed_cDC2))
+
+spe$fixed_cDC2_1 <- ifelse(assay(spe,"data")["CD83",]<=0.12  & spe$final_cluster == "cDC2", 
+                   
+                   "CD83NegcDC2", spe$fixed_cDC2)
+
+
+
+unique(spe$fixed_cDC2_1)
+
+test<-spe|>
+  filter(is.na(spe$fixed_cDC2_1))
+
+
+
+unique(spe$final_cluster)
+spe <- spe |>
+  mutate(final_cluster_1= case_when(
+    
+    final_cluster == "NK/Innate Lymphocytes" & IFNgpos ~ "IFNgPosNKInnateLymphocytes",
+    final_cluster == "NK/Innate Lymphocytes" & !IFNgpos ~ "IFNgNegNKInnateLymphocytes",
+    final_cluster == "Follicular B cell"~ "FollicularBcell",
+    final_cluster == "Extrafollicular B cell"~ "ExtrafollicularBcell",
+    final_cluster == "pDC" & !CD83pos ~ "CD83NegpDC",
+    final_cluster == "pDC" & CD83pos ~ "CD83PospDC",
+    final_cluster == "Langerin+ cDC2" & CD83pos~ "CD83PosLangerincDC2",
+    final_cluster == "Langerin+ cDC2" & !CD83pos~ "CD83NegLangerincDC2",
+    fixed_cDC2_1 == "CD83NegcDC2 "~ "CD83NegcDC2",
+    fixed_cDC2 == "CD83PoscDC2" ~ "CD83PoscDC2",
+    final_cluster == "CD169- macs"& CD83pos~ "CD83PosCD169NegMacs",
+    final_cluster == "CD169- macs"& !CD83pos~ "CD83NegCD169NegMacs",
+    final_cluster == "cDC1" & CD83pos~ "CD83PoscDC1",
+    final_cluster == "cDC1" & !CD83pos~ "CD83NegcDC1",
+    final_cluster == "CD169+ macs"& CD83pos ~ "CD83PosCD169PosMacs",
+    final_cluster == "CD169+ macs"& !CD83pos ~ "CD83NegCD169PosMacs",
+    final_cluster == "Mono/mac"& CD83pos ~ "CD83PosMonoMac",
+    final_cluster == "Mono/mac"& !CD83pos ~ "CD83NegMonoMac",
+    final_cluster == "Memory CD8+ T cell" & IFNgpos ~ "INFgPosMemoryCD8Tcell",
+    final_cluster == "Memory CD8+ T cell" & !IFNgpos ~ "INFgNegMemoryCD8Tcell",
+    final_cluster == "Naive CD8+ T cell" & IFNgpos ~"IFNgPosNaiveCD8Tcell",
+    final_cluster == "Naive CD8+ T cell" & !IFNgpos ~"IFNgNegNaiveCD8Tcell",
+    final_cluster == "Memory CD4+ T cell"& IFNgpos~ "IFNgposMemoryCD4Tcell",
+    final_cluster == "Memory CD4+ T cell"& !IFNgpos~ "IFNgNegMemoryCD4Tcell",
+    final_cluster == "Naive CD4+ T cell" & IFNgpos~ "IFNgPosNaiveCD4Tcell",
+    final_cluster == "Naive CD4+ T cell" & !IFNgpos~ "IFNgNegNaiveCD4Tcell",
+    final_cluster == "Fibroblast" ~ "Fibroblast",
+    final_cluster == "FRC"~ "FRC",
+    final_cluster == "Adipocyte" ~ "Adipocyte",
+    final_cluster == "LEC" ~ "LEC",
+    final_cluster == "BEC"~ "BEC",
+    final_cluster == "FDC"~ "FDC"
+
+  ))
+
+##for some reason my CD83- cDC2s are being left out... the NAs are CD83- cDC2s... add them back in here
+
+list(unique(spe$final_cluster_2))
+
+test<-spe|>
+  filter(is.na(spe$final_cluster_1))
+
+unique(test$final_cluster)
+unique(test$fixed_cDC2_1)
+unique(test$fixed_cDC2)
+sum(test$final_cluster == "cDC2")
+
+
+spe$final_cluster_2 <- ifelse(is.na(spe$final_cluster_1), 
+                   
+                   "CD83NegcDC2", spe$final_cluster_1)
+unique(spe$final_cluster_2)
+
+
+# p2<-dittoBarPlot(spe,  var = "final_cluster", group.by = "DonorID", legend.show = T, legend.title = "Base cell type", split.by = "treatment")
+
+spatialCoordsNames(spe)<-c("X" ,"Y")
+spe$x<-(as.data.frame(spatialCoords(spe))$X)#need to have the spatial data in col for below
+spe$y<-(as.data.frame(spatialCoords(spe))$Y)
+spatialCoordsNames(spe) <- c("x", "y")
+spe$CellID<-(as.data.frame(spe$CellID))
+spe$cells<-spe$uID# wants the spatial data to be "x" and "y" for the below to work
+
+
+
+
+
+
+spe|>
+  colData()|>
+  as.data.frame()|>
+  filter(ImageID== "17")|>
+  filter(final_cluster_2%in%c ("INFgPosMemoryCD8Tcell", "CD83NegcDC2", "CD83PoscDC2") )|>
+  arrange(final_cluster_2)|>
+    ggplot(aes(x = x, y = y, color = final_cluster_2)) +
+  geom_point(size = 1) +
+  theme_classic()+
+  scale_colour_manual(values = c("INFgPosMemoryCD8Tcell" = "#DCE319FF", "CD83NegcDC2"= "#481567FF",   "CD83PoscDC2" = "#2D708Eff" )) +
+  guides(colour = guide_legend(title = "Cell types", override.aes = list(size = 3)))
+
+
+
+
+
+
+```
+
+```{r}
+biologicalHierarchy=list(
+  CD169PosMacs= c("CD169PosMacs",
+  CD169NegMacs ="CD169NegMacs",
+  MonoMac =   "MonoMac",
+  pDC = "pDC",
+  cDC1 ="cDC1",
+  cDC2 = "cDC2" , 
+  LangerincDC2 = "LangerincDC2" , 
+  Stromal=c ("FRC", "Fibroblast" , "BEC" ,    "FDC" ,   "Adipocyte" , "LEC"),     
+  CD4_T_cell=c ("MemoryCD4Tcell", "NaiveCD4Tcell") ,
+  CD8_T_cell=c("MemoryCD8Tcell", "NaiveCD8Tcell"),
+  B_cell= c("ExtrafollicularBcell", "FollicularBcell")
+)
+
+
+# here add some more categories
+biologicalHierarchy$potential_IFNg_producing_lymphocytes =c (biologicalHierarchy$CD4_T_cell,biologicalHierarchy$CD8_T_cell,
+                                "NKInnateLymphocytes")
+
+#have the APCs on their own and also in broader context
+biologicalHierarchy$APC =c (biologicalHierarchy$CD169PosMacs,biologicalHierarchy$CD169NegMacs,
+                                biologicalHierarchy$pDC, biologicalHierarchy$cDC1, biologicalHierarchy$cDC2,
+                             biologicalHierarchy$LangerincDC2, biologicalHierarchy$MonoMac )
+
+
+
+
+all<-unique(spe$final_cluster)
+```
+
+
+
+```{r}
+
+
+# spe<- readRDS ("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250623_afterlisa_1_cellTyepNew.rds")
+
+
+
+unique(spe$final_cluster_2)
+
+
+biologicalHierarchy=list(
+Stromal=c ("FRC", "Fibroblast" , "BEC" ,    "FDC" ,   "Adipocyte" , "LEC"),     
+Bcell= c("ExtrafollicularBcell", "FollicularBcell"),
+
+
+  CD83PosAPC= c("CD83PosCD169PosMacs",
+ "CD83PosCD169NegMacs",
+ "CD83PosMonoMac",
+ "CD83PospDC",
+ "CD83PoscDC1",
+"CD83PoscDC2",
+ "CD83PosLangercDC2") ,
+  
+    CD83NegAPC= c("CD83NegCD169PosMacs",
+"CD83NegCD169NegMacs",
+"CD83NegMonoMac",
+"CD83NegpDC",
+"CD83NegcDC1", 
+"CD83NegcDC2",
+"CD83NegLangerincDC2"),
+
+IFNgPosLymphocytes = c("INFgPosMemoryCD8Tcell",
+"IFNgPosNaiveCD8Tcell",
+"IFNgPosMemoryCD4Tcell",
+"IFNgPosNaiveCD4Tcell",
+"IFNgPosNKInnateLymphocytes"),
+
+IFNgNegLymphocytes = c("INFgNegMemoryCD8Tcell",
+"IFNgNegNaiveCD8Tcell",
+"IFNgNegMemoryCD4Tcell",
+"IFNgNegNaiveCD4Tcell",
+"IFNgNegNKInnateLymphocytes")
+
+)
+
+
+
+
+biologicalHierarchy$APC= c(biologicalHierarchy$CD83PosAPC, biologicalHierarchy$CD83NegAPC ) 
+  
+biologicalHierarchy$Lymphocytes = c( biologicalHierarchy$IFNgPosLymphocytes, biologicalHierarchy$IFNgNegLymphocytes)
+
+
+all<-unique(spe$final_cluster_2)
+
+parentDf <- parentCombinations(
+  all = all, parentList= biologicalHierarchy
+)
+
+
+
+
+```
+
+
+
+```{r}
+
+```
+
+
+```{r}
+speKontextual_50 <- Kontextual(
+  cells = spe,
+  parentDf = parentDf,
+  r = 50,
+  imageID = "ImageID",
+  cellType="final_cluster_2",
+  spatialCoords = c("x", "y"),
+  inhom = T
+  
+  
+)
+
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual50_20250626_fix_2.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+saveRDS(speKontextual_50, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250626_fix_2.rds")
+# speKontextual_50<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250626_fix.rds")
+
+kontextMat_50 <- prepMatrix(speKontextual_50)
+
+spe$imageID<-spe$ImageID
+
+mixed_effect_model_50<-spicy(spe, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster_2",
+              spatialCoords = c("x", "y"),
+              weights=T,
+              alternateResult = kontextMat_50)
+spe$image
+
+saveRDS(mixed_effect_model_50, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/mixed_effect_20250626_fix_2.rds")
+?signifPlot
+# contextLabels = list("CD169+ Macrophage", "CD169- Macrophage", "Monocyte/Macrophage",  "pDC",  "cDC1",   "cDC2" , "Langerin+ cDC2",
+#                      
+#                     "Stromal", "CD4 T cell", "CD8 T cell", "B cell", "Potential IFNgamma producing lymphocytes", "APC")
+
+signifPlot(mixed_effect_model_50,
+            breaks = c(-7,7,1))
+
+# signifPlot(mixed_effect_model_50,
+#             breaks = c(-7,7,1), contextLabels = contextLabels)
+
+ggsave("20250623_significance plot by context_AS01_50_6_fix_2.png", dpi= "print", height = 9.5, width = 15 )
+
+
+
+###yes this also worked, now I need to make one more, take out the CD83 condition leave IFNg
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+unique (spe$cellTypeNew)
+#fix spe
+
+
+spatialCoordsNames(spe)<-c("X" ,"Y")
+spe$x<-(as.data.frame(spatialCoords(spe))$X)#need to have the spatial data in col for below
+spe$y<-(as.data.frame(spatialCoords(spe))$Y)
+spatialCoordsNames(spe) <- c("x", "y")
+spe$CellID<-(as.data.frame(spe$CellID))
+spe$cells<-spe$uID# wants the spatial data to be "x" and "y" for the below to work
+
+unique(spe$cellTypeNew)
+#make graph as example of distribution of cells
+
+spe|>
+  colData()|>
+  as.data.frame()|>
+  filter(ImageID== "17")|>
+  filter(final_cluster_1%in%c ("INFgPosMemoryCD8Tcell", "CD83NegcDC2", "CD83PoscDC2") )|>
+  arrange(final_cluster_1)|>
+    ggplot(aes(x = x, y = y, color = final_cluster_1)) +
+  geom_point(size = 1) +
+  theme_classic()+
+  scale_colour_manual(values = c("INFgPosMemoryCD8Tcell" = "#DCE319FF", "CD83NegcDC2"= "#481567FF",   "CD83PoscDC2" = "#2D708Eff" )) +
+  guides(colour = guide_legend(title = "Cell types", override.aes = list(size = 3)))
+
+
+
+sum(spe$cellTypeNew == "CD83_cDC2")
+
+parentDf <- parentCombinations(
+  all = all, parentList= biologicalHierarchy
+)
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250619_parent_DF__")
+
+
+?parentCombinations
+
+
+
+head(parentDf)
+```
+
+
+```{r}
+speKontextual_50 <- Kontextual(
+  cells = spe,
+  parentDf = parentDf,
+  r = 50,
+  imageID = "ImageID",
+  cellType="final_cluster",
+  spatialCoords = c("x", "y"),
+  inhom = T
+  
+  
+)
+
+saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual50_20250619.rds")
+
+spe$treatment_factor <- factor(spe$treatment, levels = c("mock", "AS01", "R848"))
+spe$imageID<-spe$ImageID
+
+
+saveRDS(speKontextual_50, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250619.rds")
+speKontextual_50<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/speKontextual_20250619.rds")
+
+kontextMat_50 <- prepMatrix(speKontextual_50)
+
+mixed_effect_model_50<-spicy(spe, 
+              condition = "treatment_factor",
+              covariates = "treatment_factor",
+              subject = "DonorID",
+              imageID = "imageID",
+              cellType = "final_cluster",
+              spatialCoords = c("x", "y"),
+              weights=T,
+              alternateResult = kontextMat_50)
+
+saveRDS(mixed_effect_model_50, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/mixed_effect_20250619.rds")
+?signifPlot
+contextLabels = list("CD169+ Macrophage", "CD169- Macrophage", "Monocyte/Macrophage",  "pDC",  "cDC1",   "cDC2" , "Langerin+ cDC2",
+                     
+                    "Stromal", "CD4 T cell", "CD8 T cell", "B cell", "Potential IFNgamma producing lymphocytes", "APC")
+
+
+
+signifPlot(mixed_effect_model_50,
+            breaks = c(-7,7,1), contextLabels = contextLabels)
+
+ggsave("20250623_significance plot by context_AS01_50_6.png", dpi= "print", height = 9.5, width = 15 )
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+unique(spe$final_cluster)
+spe <- spe |>
+  mutate(final_cluster_1= case_when(
+    
+    
+    final_cluster == "NK/Innate Lymphocytes" & IFNgpos ~ "IFNgPosNKInnateLymphocytes",
+    final_cluster == "NK/Innate Lymphocytes" & !IFNgpos ~ "IFNgNegNKInnateLymphocytes",
+    final_cluster == "Follicular B cell"~ "FollicularBcell",
+    final_cluster == "Extrafollicular B cell"~ "ExtrafollicularBcell",
+    final_cluster == "pDC" & !CD83pos ~ "CD83NegpDC",
+    final_cluster == "pDC" & CD83pos ~ "CD83PospDC",
+    final_cluster == "Langerin+ cDC2" & CD83pos~ "CD83PosLangerincDC2",
+    final_cluster == "Langerin+ cDC2" & !CD83pos~ "CD83NegLangerincDC2",
+    final_cluster == "cDC2 "& CD83pos ~ "CD83PoscDC2",
+    final_cluster == "cDC2 "& !CD83pos ~ "CD83NegcDC2",
+    final_cluster == "CD169- macs"& CD83pos~ "CD83PosCD169NegMacs",
+    final_cluster == "CD169- macs"& !CD83pos~ "CD83NegCD169NegMacs",
+    final_cluster == "cDC1" & CD83pos~ "CD83PoscDC1",
+    final_cluster == "cDC1" & !CD83pos~ "CD83NegcDC1",
+    final_cluster == "CD169+ macs"& CD83pos ~ "CD83PosCD169PosMacs",
+    final_cluster == "CD169+ macs"& !CD83pos ~ "CD83NegCD169PosMacs",
+    final_cluster == "Mono/mac"& CD83pos ~ "CD83PosMonoMac",
+    final_cluster == "Mono/mac"& !CD83pos ~ "CD83NegMonoMac",
+    final_cluster == "Memory CD8+ T cell" & IFNgpos ~ "INFgPosMemoryCD8Tcell",
+    final_cluster == "Memory CD8+ T cell" & !IFNgpos ~ "INFgNegMemoryCD8Tcell",
+    final_cluster == "Naive CD8+ T cell" & IFNgpos ~"IFNgPosNaiveCD8Tcell",
+    final_cluster == "Naive CD8+ T cell" & !IFNgpos ~"IFNgNegNaiveCD8Tcell",
+    final_cluster == "Memory CD4+ T cell"& IFNgpos~ "IFNgposMemoryCD4Tcell",
+    final_cluster == "Memory CD4+ T cell"& !IFNgpos~ "IFNgNegMemoryCD4Tcell",
+    final_cluster == "Naive CD4+ T cell" & IFNgpos~ "IFNgPosNaiveCD4Tcell",
+    final_cluster == "Naive CD4+ T cell" & !IFNgpos~ "IFNgNegNaiveCD4Tcell",
+    final_cluster == "Fibroblast" ~ "Fibroblast",
+    final_cluster == "FRC"~ "FRC",
+    final_cluster == "Adipocyte" ~ "Adipocyte",
+    final_cluster == "LEC" ~ "LEC",
+    final_cluster == "BEC"~ "BEC",
+    final_cluster == "FDC"~ "FDC"
+
+  ))
+```
+
