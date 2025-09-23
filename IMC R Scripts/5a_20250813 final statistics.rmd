@@ -182,7 +182,7 @@ df <- colData(spe) %>%
 
 df$treatment_factor<- factor(df$treatment, levels=c("mock", "AS01", "R848"))
 
-saveRDS(df, "df_forHarry_percent_groupbyDonorID.rds")
+
 
 # Assuming your data is in long format
 # Columns: cell_type, treatment, subject, cell_count, total_cells
@@ -243,19 +243,6 @@ pval_labels_posthoc <- all_contrasts %>%
 
 
 
-
-# Plot
-# ggplot(plot_data, aes(x = treatment, y = percent, fill = treatment)) +
-#   geom_boxplot() +
-#   facet_wrap(~ final_cluster, scales = "free_y") +
-#   geom_text(data = pval_labels, aes(x = 2.5, y = max(plot_data$percent+0.5), label = label),
-#             inherit.aes = FALSE, vjust = 1.5) +
-#   labs(title = "Percent Cell Types by Treatment Group",
-#        x = "Treatment Group", y = "Proportion") +
-#   theme_classic()
-
-
-#put this into the other one imcrtools to pick out significant ones
 all_contrasts %>%
 filter(p.value < 0.05)
 
@@ -281,52 +268,11 @@ plot1
 
 ggsave("20250807_comapring mixed effect models test_3.tif", dpi= "retina", height = 11, width = 12 )
 
-# plot2<-ggplot(plot_data, aes(x = treatment_factor, y = percent)) +
-#   geom_boxplot(aes(fill= treatment_factor), position = "dodge") +
-#   facet_wrap(~ final_cluster, scales= "fixed", shrink = T, ) +
-#   labs(title = "Percent Cell Types by Treatment Group",
-#        x = "Treatment Group", y = "Proportion") +
-#   theme_classic()
-# 
-# plot2
 
 
-?stat_pvalue_manual
-
-ggsave("20250714_comapring mixed effect models test_2.png", dpi= "retina", height = 12, width = 12 )
-
-# ggplot(plot_data, aes(x = treatment, y = percent, fill = treatment)) +
-#   geom_boxplot(position = 'dodge') +
-#   facet_wrap(~ final_cluster, scales = "free_y")  +
-#   labs(title = "Percent Cell Types by Treatment Group",
-#        x = "Treatment Group", y = "Proportion") +
-#   theme_classic() +
-#   geom_signif(comparisons = list(c("AS01", "mock"), c("AS01", "R848")) annotations = signif(p.values, digits = 2)
-# 
-# 
-# ggsave("20250506_comapring mixed effect models test_stat.png", dpi= "print", height = 7, width = 12 )
 
 
-#So we see differences in the number of follicular B and naive T cells, I strongly suspect this is due to donor differnces (some have more B cell zones than others)
-#I want to make a graph to show this
-#
 
-
-# ggplot(plot_data, aes(x = treatment, y = percent, colour = DonorID)) +
-#   geom_jitter(size= 1) +
-#   facet_wrap(~ final_cluster, scales = "free_y") +
-#   geom_text(data = pval_labels, aes(x = 2.5, y = Inf, label = label),
-#             inherit.aes = FALSE, vjust = 1.5) +
-#   labs(title = "Percent Cell Types by Treatment Group",
-#        x = "Treatment Group", y = "Proportion") +
-#   theme_classic()
-# 
-# ?facet_wrap
-# 
-# s
-# ggsave("20250506_comapring mixed effect models test_jitter.png", dpi= "print", height = 7, width = 12 )
-# 
-# unique(spe$final_cluster)
 ```
 
 ```{r}
@@ -496,7 +442,7 @@ pheatmap::pheatmap(assay(mean_aggregation_sum, "data"), scale="column", cluster_
 dev.off()
 
 
-##now just immune cells, but also no B cells becuase we don't care about them. Don't confuse people by showing them if we aren't going to tak about them later
+##now just immune cells, but also no B cells becuase we don't care about them for now. Don't confuse people by showing them if we aren't going to talk about them later...
 
 rowSubset (spe)<- c( "IFN gamma"
 ,"CD83", "CXCR3", "CCR7", "CCR6",             
