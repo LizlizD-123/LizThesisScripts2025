@@ -1,0 +1,394 @@
+---
+title: "Liz Analysis"
+author: "Thomas R O'Neil"
+date: "2025-03-17"
+output: 
+  html_document:
+    code_folding: hide
+    css: https://drthomasoneil.github.io/CVR-site/assets/.style.css
+#edited by Elizabeth Dunn 2025
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=F, warning=F, error=F)
+```
+
+# setup and prep
+
+## Plans
+
+- Load libraries
+- Adjust colnames
+- Load SPE
+- Subset Adipocytes out
+
+## Libraries
+
+```{r}
+library(IMComplete)
+library(tidyverse)
+library(SpatialExperiment)
+library(lisaClust)
+```
+
+## Adjusting colnames
+
+```{r, eval=F}
+setwd("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow")
+#renamed the file to cell3.csv
+dat <- read.csv("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/all cell measurements 20250429.csv")
+colnames(dat)
+# get column indices with Mean
+index = grep("Mean", colnames(dat), value=T)
+
+#create df with just those
+means <- dat[, index]
+colnames(means)
+#get all other columns
+df <- dat[, setdiff(colnames(dat),index)]
+colnames(df)
+#remove the added name 
+for(i in 1:ncol(means)) {
+  colnames(means)[i] = str_split(str_split(colnames(means)[i], "ROI..1.00.µm.per.pixel..")[[1]][2], "\\.\\.")[[1]][1]
+}
+colnames(means)
+#extra columns for some reason
+#means <- means[, 1:38] #old file
+means <- means[, 2:39]
+colnames(means) <- paste0("x", colnames(means))
+summary(means)
+
+write.csv(cbind(df, means),"D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/cell.csv", row.names=F)
+
+```
+
+## Create Spatial Experiment
+
+Custom script to handle the differing colnames from expected (e.g. )
+
+```{r, eval=F}
+setwd("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow")
+#broken down Create Object function
+#read in data
+cells <- utils::read.csv(file.path("analysis", "4_pyprofiler_output", 
+                                   "cell.csv"), check.names=F)
+#summary(cells)
+#now get rid of the NA cells. During the Qupath process out of image boundary cells are moved IF->IMC, so they have NA for intensity values. Remove them now
+#cells1<-cells[complete.cases(cells$x113In_vimentin),]
+#complete.cases(cells1)
+#summary(cells1)
+#sapply(cells1,function(x) sum(is.na(x)))
+#sum(is.na(cells$ROI..1.00.µm.per.pixel..113In_vimentin..Std.dev.))
+#sum(is.na(cells1$ROI..1.00.µm.per.pixel..113In_vimentin..Std.dev.))
+cells<-cells[complete.cases(cells$x113In_vimentin),]
+
+panel <- utils::read.csv("panel.csv")
+image <- utils::read.csv("image.csv")
+
+panel <- panel %>% dplyr::filter(.data$Full == 1)
+dt <- dplyr::left_join(cells, image, by = dplyr::join_by("Image"))
+markers <- panel[["Target"]]
+meta <- setdiff(colnames(dt), markers)
+counts <- dt[, markers]
+meta <- dt[,setdiff(colnames(dt),c("Centroid.X.µm", "Centroid.Y.µm", markers))]
+coords <- dt[, c("Centroid.X.µm", "Centroid.Y.µm")]
+rownames(panel) <- panel[["Target"]]
+markerData <- dplyr::select(panel, -"Target")
+markerData <- markerData[markers, ]
+spe <- SpatialExperiment::SpatialExperiment(assays = list(counts = t(counts)), 
+                                            colData = meta, rowData = markerData, spatialCoords = as.matrix(coords), 
+                                            sample_id = as.character(meta[["ImageID"]]))
+spe[["Image"]] <- as.factor(spe[["Image"]])
+spe[["ImageID"]] <- as.factor(spe[["ImageID"]])
+spe[["DonorID"]] <- as.factor(spe[["DonorID"]])
+colour_vectors <- list()
+donor_ids <- unique(spe[["DonorID"]])
+donor_colors <- RColorBrewer::brewer.pal(12, name = "Paired")[as.numeric(donor_ids)%%12 + 
+                                                                1]
+DonorID <- stats::setNames(donor_colors, donor_ids)
+colour_vectors[["DonorID"]] <- DonorID
+image_ids <- unique(spe[["ImageID"]])
+image_colors <- RColorBrewer::brewer.pal(12, name = "Paired")[as.numeric(image_ids)%%12 + 
+                                                                1]
+ImageID <- stats::setNames(image_colors, image_ids)
+colour_vectors[["ImageID"]] <- ImageID
+S4Vectors::metadata(spe)[["colour_vectors"]] <- colour_vectors
+
+colnames(spe) <- paste0(spe[["ImageID"]], "_", spe[["Instance"]])
+saveRDS(spe, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250430_spe.rds")
+
+```
+
+## Subset Adipocytes
+
+Subsetting Adipocytes and saving as separate object for later.
+
+```{r, eval=T}
+setwd("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow")
+spe<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250430_spe.rds")
+spe$cellID <- spe$Instance
+colnames(spatialCoords(spe)) <- c("X", "Y")
+
+NormaliseData <- function (object) 
+{
+  SummarizedExperiment::assay(object, "data") <-SummarizedExperiment::assay(object, 
+    "counts")
+  images <- SummarizedExperiment::colData(object)$Image
+  unique_images <- unique(images)
+  exprs_matrix <- SummarizedExperiment::assay(object, "data")
+  channels <- rownames(exprs_matrix)
+  base_matrix <- matrix(NA, nrow = nrow(exprs_matrix), ncol = ncol(exprs_matrix))
+  rownames(base_matrix) <- channels
+  colnames(base_matrix) <- colnames(exprs_matrix)
+  for (image in unique_images) {
+    image_indices <- which(images == image)
+    for (channel in channels) {
+      channel_data <- exprs_matrix[channel, image_indices]
+      scaled_data <- base::scale(channel_data)
+      base_matrix[channel, image_indices] <- scaled_data
+    }
+  }
+  SummarizedExperiment::assay(object, "scale.data") <- base_matrix
+  return(object)
+}
+spe <- NormaliseData(spe)
+spe$ImShort <- spe$ImageID
+saveRDS(spe, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250430_norm_spe.rds")
+
+spe_adipo <- spe[, spe$Classification == "Adipocyte"]
+saveRDS(spe_adipo, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/spe_adipo_noQC.rds")
+
+spe <- spe[, spe$Classification != "Adipocyte"]
+saveRDS(spe, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/spe_noadipo_noQC.rds")
+
+rm(spe_adipo)
+
+```
+
+## Adjust the cellID to match masks from Qupath
+
+```{r eval=F}
+#initial workaround for Instance to cellID
+
+# spe <- readRDS("analysis/4_pyprofiler_output/norm_spe.rds")
+# files = paste0("analysis/5_R_analysis/results_withinstance_20250324/",list.files("~/Desktop/test_IF/LizIMCIFReg/analysis/5_R_analysis/results_withinstance_20250324"))
+# i=1 
+# dat <- read.delim(files[i])
+# dat <- dat %>% select(Object.ID, Instance, Image)
+# for(i in 2:length(files)){
+#   dat <- rbind(dat, read.delim(files[i]) %>% select(Object.ID, Instance, Image))
+# }
+# dat <- dat[dat$Object.ID %in% spe$Object.ID,]
+# df <- data.frame(Object.ID = spe$Object.ID)
+# df<-df %>%
+#   left_join(dat %>% dplyr::select(Object.ID, Instance), by = "Object.ID")
+# spe$cellID = df$Instance
+# saveRDS(spe, "analysis/4_pyprofiler_output/norm_spe.rds")
+
+```
+
+
+```{r}
+##ignore this one
+spe<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250430_norm_spe.rds")
+
+CreateMantisFolder <- function (object, img_suffix = ".tiff", mask_suffix = ".tiff",
+                                assay_name = "data", analysis_path = "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis",
+                                mantis_path = "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/5_R_analysis/MantisProject2", mask_col = "IMC_name")
+  
+{
+  dir.create(mantis_path, showWarnings = FALSE)
+  image_df <- utils::read.csv("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/image.csv")
+  image_list <- image_df[["Image"]]
+  image_list <- gsub(".tiff", "", image_list) #added to remove the .tiff from the image names.
+  imshort_list <- image_df[["ImageID"]]
+  mask_list <- image_df[[mask_col]]
+  panel <- utils::read.csv("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/panel.csv") %>% dplyr::filter(.data$Full ==
+                                                            1)
+  markers <- rownames(object)
+  marker_data <- as.data.frame(t(SummarizedExperiment::assay(object,
+                                                             assay_name)))
+  metadata <- as.data.frame(SummarizedExperiment::colData(object))
+  marker_data <- cbind(metadata, marker_data)
+  for (x in seq_along(image_list)) {
+    dir.create(file.path(mantis_path, imshort_list[x]),
+               showWarnings = FALSE)
+    cur_tiff <- suppressWarnings(tiff::readTIFF(file.path("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/2_cleaned", paste0(image_list[x], img_suffix)),
+                                                all = TRUE))
+    for (channel in seq_along(cur_tiff)) {
+      marker <- panel$Target[channel]
+      filename <- file.path(mantis_path, imshort_list[x],
+                            paste0(marker, ".tiff"))
+      mat <- cur_tiff[[channel]] * 65535
+      ijtiff::write_tif(mat, filename, overwrite = TRUE,
+                        msg = FALSE)
+    }
+    file.copy(file.path(analysis_path, "3_segmentation/export_masks_for_mantis_20250429",
+                        paste0(mask_list[x], mask_suffix)), file.path(mantis_path,
+                                                                       imshort_list[x], "SegmentationFile.tif"))
+    filtered_data <- marker_data[marker_data$ImShort ==
+                                   imshort_list[x], ]
+    selected_columns <- c("cellID", markers)
+    final_data <- filtered_data[, selected_columns]
+    colnames(final_data)[colnames(final_data) %in% c("cellID")] <- c("Segment ID")
+    utils::write.csv(final_data, file.path(mantis_path,
+                                           imshort_list[x], "SegmentFeatures.csv"), row.names = FALSE)
+  }
+}
+
+spe <- readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250430_norm_spe.rds")
+CreateMantisFolder(
+  spe, 
+  mantis_path = "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/5_R_analysis/MantisProject2"
+)
+spe$CellID<-spe$cellID
+
+IMComplete::ExportFCS(spe, 
+                      assay_name = "data", 
+                      export_path = "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/5_R_analysis/FlowJo2")
+
+```
+
+
+
+```{r}
+##use this one
+spe<-readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250430_norm_spe.rds")
+
+CreateMantisFolder <- function (object, img_suffix = ".ome.tiff", mask_suffix = ".ome.tiff", 
+  assay_name = "data", analysis_path = "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/3_segmentation", 
+  mantis_path = "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/5_R_analysis/MantisProject2") 
+{
+spe$CellID<-spe$cellID
+  dir.create(mantis_path, showWarnings = FALSE)
+  image_df <- utils::read.csv("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/image.csv")
+  image_list <- image_df[["Image"]]
+  image_list <- gsub(".tiff", "", image_list) #added to remove the .tiff from the image names.
+  imshort_list <- image_df[["ImageID"]]
+  panel <- utils::read.csv("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/panel.csv") %>% dplyr::filter(.data$Full == 
+    1)
+  markers <- rownames(object)
+  marker_data <- as.data.frame(t(SummarizedExperiment::assay(object, 
+    assay_name)))
+  metadata <- as.data.frame(SummarizedExperiment::colData(object))
+  marker_data <- cbind(metadata, marker_data)
+  for (x in seq_along(image_list)) {
+    dir.create(file.path(mantis_path, imshort_list[x]), 
+      showWarnings = FALSE)
+    cur_tiff <- suppressWarnings(tiff::readTIFF(file.path("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/2_cleaned_fromqupath", paste0(image_list[x], img_suffix)), 
+      all = TRUE))
+    for (channel in seq_along(cur_tiff)) {
+      marker <- panel$Target[channel]
+      filename <- file.path(mantis_path, imshort_list[x], 
+        paste0(marker, ".tiff"))
+      mat <- cur_tiff[[channel]] * 65535
+      ijtiff::write_tif(mat, filename, overwrite = TRUE, 
+        msg = FALSE)
+    }
+    file.copy(file.path("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/3_segmentation/export_masks_for_mantis_20250429", 
+      paste0(image_list[x], mask_suffix)), file.path(mantis_path, 
+      imshort_list[x], "SegmentationFile.tif"))
+    filtered_data <- marker_data[marker_data$ImShort == 
+      imshort_list[x], ]
+    selected_columns <- c("cellID", markers)
+    final_data <- filtered_data[, selected_columns]
+    colnames(final_data)[colnames(final_data) %in% c("cellID")] <- c("Segment ID")
+    utils::write.csv(final_data, file.path(mantis_path, 
+      imshort_list[x], "SegmentFeatures.csv"), row.names = FALSE)
+  }
+}
+spe <- readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250430_norm_spe.rds")
+CreateMantisFolder(
+  spe, 
+  mantis_path = "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/5_R_analysis/MantisProject2"
+)
+spe$CellID<-spe$cellID
+
+IMComplete::ExportFCS(object= spe, 
+                      assay_name = "data", 
+                      export_path = "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/5_R_analysis/FlowJo2")
+```
+
+
+
+## Set up folders
+
+##
+```{r eval=F}
+
+```
+
+```{r}
+
+```
+
+## Functions
+
+NA
+
+# Data tidying{.tabset .tabset-fade}
+
+## Plans
+
+- Remove outliers (DNA, size)
+
+## Visualisations
+
+```{r}
+spe<-readRDS("analysis/4_pyprofiler_output/20250327_norm_spe.rds")
+
+PlotScatter(spe, 
+            "Area.µm.2",
+            "x191Ir_DNA1", 
+            "data", 
+            "data",
+            colour_by = "Classification")+geom_vline()
+
+PlotRidge(spe, assay_name = "data", features="x141Pr_CD20", split_by = "ImageID")
+
+PlotViolin(spe, "data", "x141Pr_CD20", "ImageID", pt_size = 0, alpha = 00)
+
+```
+
+```{r}
+setwd("/Users/thomasoneil/Desktop/test_IF/LizFolder")
+spe<-readRDS("analysis/4_pyprofiler_output/20250327_norm_spe.rds")
+
+spe = PerformPCA(
+    spe,
+    markers = IMComplete::UseMarkers("Cluster"),
+    assay_name = "data",
+    ncomponents = 15
+)
+
+spe = PerformUMAP(
+    spe,
+    markers = IMComplete::UseMarkers("Cluster"),
+    assay_name = "data",
+    batch_corrected = F
+)
+
+PlotDim(spe, "UMAP", var=c("x160Gd_CD14"), assay_name="data")
+PlotDim(spe, "PCA", var=c("x155Gd_CD31"), assay_name="data")
+
+spe <- FuseSOM::runFuseSOM(data = spe, markers = UseMarkers("Cluster"), 
+                        numClusters = 23, assay= "data")
+
+PlotDim(spe, "UMAP", var=c("clusters"), assay_name="data")
+
+saveRDS(spe, "analysis/4_pyprofiler_output/20250327_clustered_spe.rds")
+
+```
+
+
+## RNAScope
+
+- High resolution annotation
+
+- Distances/densities compartments & from each other
+
+- APC dist from compartments/cells.
+
+
+
+
