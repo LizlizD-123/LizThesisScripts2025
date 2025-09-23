@@ -1,0 +1,46 @@
+import qupath.lib.gui.tools.MeasurementExporter
+import qupath.lib.objects.PathCellObject
+import qupath.lib.images.servers.LabeledImageServer
+removeMeasurements(qupath.lib.objects.PathDetectionObject, "Instance")//this is to remove any old measurements before getting started.
+def imageData = getCurrentImageData()
+
+// Define output path (relative to project)
+def name = GeneralTools.getNameWithoutExtension(imageData.getServer().getMetadata().getName())
+def pathOutput = buildFilePath(PROJECT_BASE_DIR, 'export_masks_for_mantis_20250429', name + '.ome.tiff')
+mkdirs(pathOutput)
+
+
+// Define downsample
+double downsample = 1
+
+// Create an ImageServer where the pixels are derived from cells
+// If the downsample isn't 1, objects might still touch
+def labelServer = new LabeledImageServer.Builder(imageData)
+    .backgroundLabel(0)
+    .useDetections()
+    .useInstanceLabels()
+    .shuffleInstanceLabels (false)
+    //.setBoundaryLabel ('Object ID', 0)
+    .multichannelOutput(false) 
+    .build()
+//https://forum.image.sc/t/qupath-export-cell-outlines-with-instance-labels/73008/7    
+// Add instances
+def labels = labelServer.getInstanceLabels()
+for (def entry in labels.entrySet()) {
+    try (def ml = entry.getKey().getMeasurementList()) {
+        ml.putMeasurement('Instance', entry.getValue())
+    }
+}
+fireHierarchyUpdate()
+
+
+
+
+
+
+
+def outputPath_measurements = buildFilePath(PROJECT_BASE_DIR, 'results_withinstance_20250429', name + '.csv')
+mkdirs(outputPath_measurements)
+saveDetectionMeasurements(outputPath_measurements + '.csv')// can save as .csv if you want to open in excel to check anything, it will still be a .tsv in practice though
+    
+writeImage(labelServer, pathOutput)
