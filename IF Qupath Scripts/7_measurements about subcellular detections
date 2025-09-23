@@ -1,5 +1,6 @@
 //20250121 estimated true spots
 //Elizabeth Dunn
+//This script for applying classifiers to subcellular detections and adding the measurements to the parent cells
 
 for (annotation in getAnnotationObjects()){
    
