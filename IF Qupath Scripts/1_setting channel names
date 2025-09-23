@@ -1,2 +1,3 @@
-
+//Elizabeth Dunn 2025
+//Setting channel names for IF project
 setChannelNames ('DAPI', 'IFNg', 'CD56', 'CD3')
