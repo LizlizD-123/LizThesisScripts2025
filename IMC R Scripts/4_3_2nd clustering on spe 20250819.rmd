@@ -919,8 +919,41 @@ mean_aggregation_mean <- scuttle::aggregateAcrossCells(x = as(spe,              
 
 mean_aggregation_sum <- scuttle::aggregateAcrossCells(x = as(spe,                                                        "SingleCellExperiment"), ids = SummarizedExperiment::colData(spe)$population_name_1,  statistics = "sum", use.assay.type = "data",   subset.row = rowSubset(spe))
 
+#calc mean expression to use as the intercept for plots below
+
+assay(spe, "data")["CD45",]%>%
+  mean()
+
+assay(spe, "data")["CD56",]%>%
+  mean()
 
 ```
+
+```{r}
+library(dittoSeq, lib.loc = "C:/Users/CVR-Analysis/AppData/Local/R/win-library/4.4")
+
+spe$population_name_5<- factor(spe$final_cluster, levels= c("Adipocyte", "BEC", "FDC", "Fibroblast", "FRC", "LEC", "CD169+ macs", "CD169- macs", "Mono/mac", "Extrafollicular B cell", "Follicular B cell", "Memory CD4+ T cell", "Naive CD4+ T cell","Memory CD8+ T cell", "Naive CD8+ T cell",   "NK/Innate Lymphocytes","Langerin+ cDC2", "cDC1", "cDC2", "pDC"))
+
+
+colours<- c("#99cc99", "#edce30", "#ea61eb", "#80b380","#c0df25", "#dfe315", "#ff6f0d" ,"#f06b0b", "#c43c4c", "#3f2cde", "#1a0f74", "#7896af", "#afb7cc", "#fd9a6a", "#f66fbe", "#48e9f6","#9c97f2", "#5ff2a3", "#e42e9e","#56147d")
+
+unique(spe$population_name_1)
+
+
+
+dittoBoxPlot(spe, "CD45", group.by = "population_name_5", boxplot.width = 1, jitter.size = 0.2, color.panel = colours, raster.dpi =1200, data.out = T, add.line = 0.2306586)
+
+
+ggsave("20250924_CD45 expression_3.tif", dpi= "retina", height = 6, width = 15 )
+
+
+dittoBoxPlot(spe, "CD56", group.by = "population_name_5", boxplot.width = 1, jitter.size = 0.2, color.panel = colours, raster.dpi =1200, data.out = T, add.line = 0.005250357)
+
+
+ggsave("20250924_CD56 expression_3.tif", dpi= "retina", height = 6, width = 15 )
+```
+
+
 
 ```{r}
 png("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/heatmap figures/pheatmap_mean_20250710_2_rb_fix.png", res = 600, width =24, height = 22, unit = "cm")
