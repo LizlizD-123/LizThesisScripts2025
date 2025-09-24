@@ -893,7 +893,15 @@ rowSubset (spe)<- c("Vimentin",  "CD20",
 , "Langerin", "CD68","CD45" , "CD31", "CXCR3", "CD56","CCR7", "CD14", "FXIIIA"                
 , "CCR6", "CD11b", "CD45RO", "Perilipin1", "CD11c",                
 "Ki67","Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
-"HLA_DR","CD303", "CXCR5")     
+"HLA_DR","CD303", "CXCR5")   
+
+rowSubset (spe)<- c("CD20",            
+"Collagen III"
+,"CD8","Podoplanin","CD16", "CD21"                   
+, "Langerin", "CD68","CD45" , "CD31", "CD56", "CD14", "FXIIIA"                
+, "CD11b", "CD45RO", "Perilipin1", "CD11c",                
+"Clec9a", "CD3" ,"CD1c", "Siglec1", "CD4",                  
+"CD303")
 
 
 
