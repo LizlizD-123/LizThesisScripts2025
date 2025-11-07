@@ -828,14 +828,14 @@ plot_data<- readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and fl
 plot_data$treatment<- factor(plot_data$treatment, levels = c("mock", "AS01", "R848"))
 
 ggplot(plot_data, aes(x = treatment, y = percent, fill = treatment)) +
-  geom_boxplot(position = 'dodge') +
+  geom_boxplot(position = 'dodge', outlier.shape = NA ) +
   facet_wrap(~ cell_type, scales = "free_y") +
   labs(title = "Percent Cell Types by Treatment Group",
        x = "Treatment", y = "Percentage") +
   theme_classic()
 
 
-ggsave("20250711 comparing box plot IFNg cell.png", dpi= "retina", height = 12, width = 12 )
+ggsave("20250711 comparing box plot IFNg cell_2.png", dpi= "retina", height = 12, width = 12 )
 
 ##Maybe use this figure, see if it fits!
 
