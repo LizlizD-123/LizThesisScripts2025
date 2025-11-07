@@ -652,7 +652,7 @@ saveRDS(parentDf, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow
 
 spe$cellTypeNew<-spe$final_cluster
 
-spe$cellTypeNew[spe$final_cluster %in% biologicalHierarchy$APC] <- "APC"
+spe$cellTypeNew[spe$final_cluster %in% biologicalHierarchy$IFNgPosLymphocyte] <- "IFNgPosLymphocyte"
 ```
 
 ```{r}
@@ -660,6 +660,7 @@ spe$cellTypeNew[spe$final_cluster %in% biologicalHierarchy$APC] <- "APC"
 # how many IFng+ lymphocytes do I have, do the proportions of IFNg+ NKs change by treatment?
 #also check APC proportions, might be useful
 ##FOR THESIS
+
 
 
 library(lme4)
@@ -671,12 +672,18 @@ library(stringr)
 library(tibble)
 library(spicyR)
 
-spe_sub<- spe[,spe$cellTypeNew == "APC" ]
+spe_sub<- spe[,spe$cellTypeNew == "IFNgPosLymphocyte" ]
 
-p1<-dittoBarPlot(spe_sub,  var = "final_cluster", group.by = "cellTypeNew", legend.show = T, legend.title = "Base cell type", xlab = "Cell types by activation status", ylab = "Percent" ,main = "A", split.by = "treatment", data.out = T, x.labels = "IFNgamma+ Lymphocytes")
+unique(spe_sub$final_cluster)
+
+?dittoBarPlot
+
+p1<-dittoBarPlot(spe_sub,  var = "final_cluster", group.by = "cellTypeNew", legend.show = T, legend.title = "Base cell type", xlab = "Cell types by activation status", ylab = "Percent" ,main = "A", split.by = "ImageID", data.out = T, x.labels = "IFNgamma+ Lymphocytes")
 p1[[1]]
-ggsave("20250707_bar_plot_4-treatment.png", dpi= "retina", height = 8, width = 8 )
-percentages_barplot_df_2<-p2[[2]]  
+ggsave("20250707_bar_plot_4-treatment_3.png", dpi= "retina", height = 8, width = 8 )
+percentages_barplot_df_1<-p1[[2]]  
+
+saveRDS(percentages_barplot_df_1, "D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/IFNg percentages by donorID.rds")
 
 p2<-dittoBarPlot(spe_sub,  var = "final_cluster", group.by = "cellTypeNew", legend.show = T, legend.title = "Base cell type", xlab = "Cell types by activation status", ylab = "Percent" ,main = "A", split.by = "ImageID", data.out = T, x.labels = "IFNgamma+ Lymphocytes")
 p2[[1]]
@@ -693,7 +700,7 @@ df_check <- colData(spe) %>%
   mutate(percent = 100 * counts / total)
        
        
-df_out_all <- percentages_barplot_df_2 |>
+df_out_all <- percentages_barplot_df_1 |>
   mutate(treatment = case_when(
     ImageID == "1" ~ "AS01",
     ImageID == "12" ~ "AS01",
@@ -814,17 +821,15 @@ pval_labels_posthoc <- all_contrasts %>%
 
 plot_data$cell_type<-plot_data$label
 
-# saveRDS(plot_data,"D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250707_plot_data_percentages_IFNg.rds")
+#saveRDS(plot_data,"D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20251107_plot_data_percentages_IFNg.rds")
 
-plot_data<- readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20250707_plot_data_percentages_IFNg.rds")
+plot_data<- readRDS("D:/ElizabethD/Workflow 2 IMCAnalysis 20250328 mantis and flow/analysis/4_pyprofiler_output/20251107_plot_data_percentages_IFNg.rds")
 
 plot_data$treatment<- factor(plot_data$treatment, levels = c("mock", "AS01", "R848"))
 
 ggplot(plot_data, aes(x = treatment, y = percent, fill = treatment)) +
   geom_boxplot(position = 'dodge') +
   facet_wrap(~ cell_type, scales = "free_y") +
-  geom_text(data = pval_labels, aes(x = 2, y = Inf, label = label),
-            inherit.aes = FALSE, vjust = 0.8) +
   labs(title = "Percent Cell Types by Treatment Group",
        x = "Treatment", y = "Percentage") +
   theme_classic()
