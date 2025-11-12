@@ -470,14 +470,14 @@ spee <- spe |>
   mutate(final_cluster = case_when(
     
     
-    population_name_NKs_adipo == "NK" ~ "NK/Innate Lymphocytes", # CD4 T cells
+    population_name_NKs_adipo == "NK" ~ "NK/Innate Lymphocytes", 
     B_cell_parent_cluster == "follicular" ~ "Follicular B cell",
     B_cell_parent_cluster ==  "extrafollicular" ~ "Extrafollicular B cell",
-    Cluster_APC_final == "pDC" ~ "pDC",# Granulocytes
-    Cluster_APC_final == "Langerin+ cDC2" ~ "Langerin+ cDC2", # Myeloid cells
-    Cluster_APC_final == "cDC2" ~ "cDC2", # Squamous cells
-    Cluster_APC_final == "CD169- macs" ~ "CD169- macs", # Epithelial cells
-    Cluster_APC_final == "cDC1" ~ "cDC1", # Squamous cells (tumour cells)
+    Cluster_APC_final == "pDC" ~ "pDC",
+    Cluster_APC_final == "Langerin+ cDC2" ~ "Langerin+ cDC2", 
+    Cluster_APC_final == "cDC2" ~ "cDC2", 
+    Cluster_APC_final == "CD169- macs" ~ "CD169- macs", 
+    Cluster_APC_final == "cDC1" ~ "cDC1", 
     Cluster_APC_final == "CD169+ macs" ~ "CD169+ macs", # CD4 T cells
     Cluster_APC_final == "Mono/mac" ~ "Mono/mac",
     Cluster_T_final == "Memory CD8+ T cell" ~ "Memory CD8+ T cell",
